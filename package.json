@@ -1,0 +1,22 @@
+{
+  "name": "healwright",
+  "version": "0.1.0",
+  "description": "AI-ready self-healing locators and failure analysis for Playwright test suites",
+  "type": "module",
+  "bin": { "healwright": "./dist/src/cli.js" },
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "demo": "npm run build && node dist/src/demo.js",
+    "test": "npm run build && node --test dist/test/*.test.js"
+  },
+  "dependencies": { "linkedom": "^0.18.5" },
+  "peerDependencies": { "@playwright/test": "^1.48.0" },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  },
+  "license": "MIT"
+}
