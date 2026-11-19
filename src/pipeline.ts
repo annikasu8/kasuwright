@@ -12,7 +12,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseBrd } from "./brd.js";
-import { toJiraIssues, toJiraPayloads, toJiraCsv, jiraConfigFromEnv, pushToJira, publishRunToJira, type JiraPublishFile } from "./jira.js";
+import { toJiraIssues, toJiraPayloads, toJiraCsv, jiraConfigFromEnv, pushToJira, publishRunToJira, type JiraPublishFile, type JiraConfig } from "./jira.js";
 import { generateTestCases, testCasesToMarkdown } from "./testcases.js";
 import { generateDataSet, dataSetToCsv, dataSetToSql } from "./testdata.js";
 import { scaffoldFramework } from "./codegen.js";
@@ -21,15 +21,25 @@ import { jenkinsfile, githubActions } from "./ci.js";
 import type { LlmProvider } from "./llm.js";
 import { extractRequirementsLLM, designCasesLLM } from "./llm-features.js";
 
-export interface PipelineOptions { brdPath: string; outDir: string; projectKey?: string; llm?: LlmProvider | null }
+export interface PipelineOptions {
+  brdPath: string;
+  outDir: string;
+  projectKey?: string;
+  llm?: LlmProvider | null;
+  /** Explicit Jira config (e.g. from the web UI). Undefined = read env vars; null = export mode. */
+  jira?: JiraConfig | null;
+  /** Called as each stage completes (live progress for the web UI). */
+  onStage?: (s: StageResult) => void;
+}
 export interface StageResult { name: string; detail: string }
-export interface PipelineSummary { outDir: string; requirements: number; jiraIssues: number; testCases: number; stages: StageResult[] }
+export interface PipelineSummary { outDir: string; requirements: number; jiraIssues: number; testCases: number; stages: StageResult[]; jiraCreated?: string[] }
 
 export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummary> {
   const projectKey = opts.projectKey ?? "QA";
   const out = opts.outDir;
   mkdirSync(out, { recursive: true });
   const stages: StageResult[] = [];
+  const push = (s: StageResult) => { stages.push(s); opts.onStage?.(s); };
   const put = (rel: string, content: string) => {
     const p = join(out, rel);
     mkdirSync(join(p, ".."), { recursive: true });
@@ -54,19 +64,19 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
     }
   }
   put("requirements.json", JSON.stringify(reqs, null, 2));
-  stages.push({ name: "1. BRD intake", detail: `${reqs.length} requirements parsed (${reqs.map((r) => r.id).join(", ")})${llmNote}` });
+  push({ name: "1. BRD intake", detail: `${reqs.length} requirements parsed (${reqs.map((r) => r.id).join(", ")})${llmNote}` });
 
   // 2 — Jira
   const issues = toJiraIssues(reqs, projectKey);
   put("jira/jira-payloads.json", JSON.stringify(toJiraPayloads(issues, projectKey), null, 2));
   put("jira/jira-import.csv", toJiraCsv(issues));
-  const jiraCfg = jiraConfigFromEnv();
+  const jiraCfg = opts.jira !== undefined ? opts.jira : jiraConfigFromEnv();
   let createdKeys: string[] = [];
   if (jiraCfg) {
     createdKeys = await pushToJira(issues, projectKey, jiraCfg);
-    stages.push({ name: "2. Jira", detail: `Created ${createdKeys.length} issues in ${projectKey}: ${createdKeys.join(", ")}` });
+    push({ name: "2. Jira", detail: `Created ${createdKeys.length} issues in ${projectKey}: ${createdKeys.join(", ")}` });
   } else {
-    stages.push({ name: "2. Jira", detail: `${issues.length} issues exported (jira-payloads.json + jira-import.csv) — set JIRA_* env to create them directly` });
+    push({ name: "2. Jira", detail: `${issues.length} issues exported (jira-payloads.json + jira-import.csv) — set JIRA_* env to create them directly` });
   }
 
   // 3 — Manual test cases (LLM-designed when configured, templates otherwise;
@@ -88,7 +98,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
   put("test-cases.json", JSON.stringify(cases, null, 2));
   const casesMd = testCasesToMarkdown(cases);
   put("test-cases.md", casesMd);
-  stages.push({ name: "3. Manual test cases", detail: `${cases.length} cases generated (${caseNote}) — pending human review` });
+  push({ name: "3. Manual test cases", detail: `${cases.length} cases generated (${caseNote}) — pending human review` });
 
   // 4 — Test data
   const dataSets = reqs.map((r) => generateDataSet(r));
@@ -110,13 +120,13 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
   };
   put("test-data/test-data.json", JSON.stringify(namedSets, null, 2));
   const sql = ["-- Kasuwright test-data + DB validation pack", ...dataSets.map((ds) => `-- ${ds.reqId}\n${dataSetToSql(ds)}`)].join("\n");
-  stages.push({ name: "4. Test data", detail: `${dataSets.length} synthetic data sets (valid/invalid/empty/boundary) as JSON + CSV + SQL` });
+  push({ name: "4. Test data", detail: `${dataSets.length} synthetic data sets (valid/invalid/empty/boundary) as JSON + CSV + SQL` });
 
   // 5–7 — Framework scaffold + automation compilation (UI/API/DB flows)
   const byReqCases = new Map<string, { title: string; cases: typeof cases }>();
   for (const r of reqs) byReqCases.set(r.id, { title: r.title, cases: cases.filter((c) => c.reqId === r.id) });
   const scaffold = scaffoldFramework(join(out, "framework"), byReqCases, namedSets, sql);
-  stages.push({ name: "5-7. Framework + automation", detail: `Playwright framework scaffolded (${scaffold.files.length} files): specs per requirement, test data, DB validations` });
+  push({ name: "5-7. Framework + automation", detail: `Playwright framework scaffolded (${scaffold.files.length} files): specs per requirement, test data, DB validations` });
 
   // 8 — Traceability + report
   const traceRows = traceability(reqs, issues, cases);
@@ -129,7 +139,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
     traceRows,
   });
   put("report.html", html);
-  stages.push({ name: "8. Traceability + report", detail: `Matrix covers ${traceRows.length} requirements; report.html generated` });
+  push({ name: "8. Traceability + report", detail: `Matrix covers ${traceRows.length} requirements; report.html generated` });
 
   // 9 — Email
   const eml = buildEml({
@@ -143,16 +153,16 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
   const smtp = smtpConfigFromEnv();
   if (smtp) {
     await sendViaSmtp(smtp, smtp.to, eml);
-    stages.push({ name: "9. Email report", detail: `Sent to ${smtp.to} via ${smtp.host}` });
+    push({ name: "9. Email report", detail: `Sent to ${smtp.to} via ${smtp.host}` });
   } else {
-    stages.push({ name: "9. Email report", detail: "report.eml written — set SMTP_HOST / SMTP_FROM / REPORT_EMAIL_TO to send automatically" });
+    push({ name: "9. Email report", detail: "report.eml written — set SMTP_HOST / SMTP_FROM / REPORT_EMAIL_TO to send automatically" });
   }
 
   // 10 — CI/CD
   put("Jenkinsfile", jenkinsfile());
   put(".github/workflows/kasuwright.yml", githubActions());
   put("defects.json", JSON.stringify([], null, 2));
-  stages.push({ name: "10. CI/CD", detail: "Jenkinsfile + GitHub Actions workflow generated; defects.json will collect auto-defects after test runs" });
+  push({ name: "10. CI/CD", detail: "Jenkinsfile + GitHub Actions workflow generated; defects.json will collect auto-defects after test runs" });
 
   // 11 — Jira publish-back: close the loop on each created Story — an
   // automatic comment plus the run's artefacts attached to the ticket
@@ -185,10 +195,10 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
       const res = await publishRunToJira(jiraCfg, storyKey, comment, files);
       published.push(`${storyKey} (${res.attached.length} files${res.commented ? " + comment" : ""}${res.failed.length ? `, failed: ${res.failed.join(", ")}` : ""})`);
     }
-    stages.push({ name: "11. Jira publish-back", detail: `Comments + artefacts posted to ${published.length} stories: ${published.join("; ")}` });
+    push({ name: "11. Jira publish-back", detail: `Comments + artefacts posted to ${published.length} stories: ${published.join("; ")}` });
   }
 
-  const summary: PipelineSummary = { outDir: out, requirements: reqs.length, jiraIssues: issues.length, testCases: cases.length, stages };
+  const summary: PipelineSummary = { outDir: out, requirements: reqs.length, jiraIssues: issues.length, testCases: cases.length, stages, jiraCreated: createdKeys };
   put("run-summary.json", JSON.stringify(summary, null, 2));
   return summary;
 }
