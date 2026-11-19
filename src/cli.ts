@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { findCandidates, type ElementHints } from "./healer.js";
 import { analyzeToFile } from "./analyze.js";
 import { runPipeline } from "./pipeline.js";
+import { llmFromEnv } from "./llm.js";
+import { analyzeFailureLLM } from "./llm-features.js";
 
 const [cmd, ...args] = process.argv.slice(2);
 const flag = (name: string) => {
@@ -18,13 +20,54 @@ async function main(): Promise<void> {
       console.error("Usage: kasuwright pipeline --brd <BRD.md> [--out runs/latest] [--project QA]");
       process.exit(2);
     }
+    const llm = llmFromEnv();
+    console.log(llm ? `LLM: enabled (${llm.model})` : "LLM: not configured — deterministic engines only (set KASUWRIGHT_LLM_API_KEY to enable)");
     const summary = await runPipeline({
       brdPath: brd,
       outDir: flag("out") ?? join(process.cwd(), "runs", "latest"),
       projectKey: flag("project") ?? "QA",
+      llm,
     });
     console.log(`\nKasuwright E2E pipeline complete -> ${summary.outDir}`);
     for (const s of summary.stages) console.log(`  ${s.name}: ${s.detail}`);
+    return;
+  }
+  if (cmd === "llm-check") {
+    const llm = llmFromEnv();
+    if (!llm) {
+      console.log("LLM not configured. Set KASUWRIGHT_LLM_API_KEY (and optionally KASUWRIGHT_LLM_MODEL, KASUWRIGHT_LLM_BASE_URL for any OpenAI-compatible endpoint). All features still work with the deterministic engines.");
+      return;
+    }
+    const reply = await llm.chat([{ role: "user", content: "Reply with the single word: ready" }]);
+    console.log(`LLM reachable: provider=${llm.name} model=${llm.model} reply="${reply.trim().slice(0, 40)}"`);
+    return;
+  }
+  if (cmd === "explain") {
+    const errFile = args[0];
+    if (!errFile) {
+      console.error("Usage: kasuwright explain <error.txt> [dom.html]");
+      process.exit(2);
+    }
+    const llm = llmFromEnv();
+    if (!llm) {
+      console.error("The failure analyst needs an LLM: set KASUWRIGHT_LLM_API_KEY. (The rule-based `analyze` command works without one.)");
+      process.exit(2);
+    }
+    const analysis = await analyzeFailureLLM(
+      {
+        testTitle: flag("title") ?? "unknown test",
+        error: readFileSync(errFile, "utf8"),
+        domSnippet: args[1] ? readFileSync(args[1], "utf8") : undefined,
+      },
+      llm,
+    );
+    if (!analysis) {
+      console.error("The LLM returned nothing usable for this error.");
+      process.exit(1);
+    }
+    console.log(`Root cause (${analysis.confidence} confidence): ${analysis.rootCause}`);
+    for (const e of analysis.evidence) console.log(`  evidence: ${e}`);
+    console.log(`Suggested fix: ${analysis.suggestedFix}`);
     return;
   }
   if (cmd === "analyze") {
@@ -64,6 +107,8 @@ Commands:
       -> traceability -> report -> email -> CI files
   kasuwright analyze [history.jsonl] [report.md]   Suite health + flaky report
   kasuwright heal <page.html> <hints.json> [out]   Find what a broken locator meant
+  kasuwright explain <error.txt> [dom.html]        LLM failure analyst (needs KASUWRIGHT_LLM_API_KEY)
+  kasuwright llm-check                             Verify the configured LLM endpoint
 `);
 }
 

@@ -18,8 +18,10 @@ import { generateDataSet, dataSetToCsv, dataSetToSql } from "./testdata.js";
 import { scaffoldFramework } from "./codegen.js";
 import { traceability, traceabilityMarkdown, renderHtmlReport, buildEml, smtpConfigFromEnv, sendViaSmtp } from "./enterprise.js";
 import { jenkinsfile, githubActions } from "./ci.js";
+import type { LlmProvider } from "./llm.js";
+import { extractRequirementsLLM, designCasesLLM } from "./llm-features.js";
 
-export interface PipelineOptions { brdPath: string; outDir: string; projectKey?: string }
+export interface PipelineOptions { brdPath: string; outDir: string; projectKey?: string; llm?: LlmProvider | null }
 export interface StageResult { name: string; detail: string }
 export interface PipelineSummary { outDir: string; requirements: number; jiraIssues: number; testCases: number; stages: StageResult[] }
 
@@ -34,10 +36,25 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
     writeFileSync(p, content);
   };
 
-  // 1 — BRD intake
-  const reqs = parseBrd(readFileSync(opts.brdPath, "utf8"));
+  // 1 — BRD intake (deterministic parser first; the LLM adds requirements
+  // from unstructured prose the parser cannot see, when a key is configured)
+  const brdText = readFileSync(opts.brdPath, "utf8");
+  let reqs = parseBrd(brdText);
+  let llmNote = "";
+  if (opts.llm) {
+    const extra = await extractRequirementsLLM(brdText, opts.llm);
+    if (extra) {
+      const known = new Set(reqs.map((r) => r.id));
+      const added = extra.filter((r) => !known.has(r.id));
+      if (reqs.length === 0) reqs = extra;
+      else reqs = [...reqs, ...added];
+      llmNote = `; LLM (${opts.llm.model}) contributed ${reqs.length === extra.length && added.length === 0 ? extra.length : added.length} requirement(s)`;
+    } else {
+      llmNote = "; LLM extraction returned nothing usable — deterministic parse kept";
+    }
+  }
   put("requirements.json", JSON.stringify(reqs, null, 2));
-  stages.push({ name: "1. BRD intake", detail: `${reqs.length} requirements parsed (${reqs.map((r) => r.id).join(", ")})` });
+  stages.push({ name: "1. BRD intake", detail: `${reqs.length} requirements parsed (${reqs.map((r) => r.id).join(", ")})${llmNote}` });
 
   // 2 — Jira
   const issues = toJiraIssues(reqs, projectKey);
@@ -51,11 +68,25 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
     stages.push({ name: "2. Jira", detail: `${issues.length} issues exported (jira-payloads.json + jira-import.csv) — set JIRA_* env to create them directly` });
   }
 
-  // 3 — Manual test cases
-  const cases = generateTestCases(reqs);
+  // 3 — Manual test cases (LLM-designed when configured, templates otherwise;
+  // a failed LLM call falls back per requirement, never blocks the run)
+  let cases: ReturnType<typeof generateTestCases>;
+  let caseNote = "templates";
+  if (opts.llm) {
+    cases = [];
+    let llmCases = 0;
+    for (const r of reqs) {
+      const designed = await designCasesLLM(r, opts.llm);
+      if (designed) { cases.push(...designed); llmCases += designed.length; }
+      else cases.push(...generateTestCases([r]));
+    }
+    caseNote = llmCases > 0 ? `${llmCases} LLM-designed + ${cases.length - llmCases} template` : "templates (LLM returned nothing usable)";
+  } else {
+    cases = generateTestCases(reqs);
+  }
   put("test-cases.json", JSON.stringify(cases, null, 2));
   put("test-cases.md", testCasesToMarkdown(cases));
-  stages.push({ name: "3. Manual test cases", detail: `${cases.length} cases generated (positive / negative / boundary per requirement) — pending human review` });
+  stages.push({ name: "3. Manual test cases", detail: `${cases.length} cases generated (${caseNote}) — pending human review` });
 
   // 4 — Test data
   const dataSets = reqs.map((r) => generateDataSet(r));

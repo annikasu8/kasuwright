@@ -11,3 +11,5 @@ export { runApiScenario, loginApiScenarios, type ApiStep, type ApiResult } from 
 export { traceability, traceabilityMarkdown, defectsFromFailures, renderHtmlReport, buildEml, sendViaSmtp, smtpConfigFromEnv, type TraceRow } from "./enterprise.js";
 export { jenkinsfile, githubActions } from "./ci.js";
 export { runPipeline, type PipelineSummary } from "./pipeline.js";
+export { OpenAiCompatibleProvider, MockLlmProvider, llmFromEnv, chatJson, type LlmProvider, type LlmMessage } from "./llm.js";
+export { extractRequirementsLLM, designCasesLLM, analyzeFailureLLM, type FailureAnalysis } from "./llm-features.js";
