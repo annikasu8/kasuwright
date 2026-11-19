@@ -58,38 +58,38 @@ export function openInBrowser(path: string): void {
 export async function runWizard(cwd: string = process.cwd()): Promise<PipelineSummary> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
-    console.log("Kasuwright — BRD nunchi full test lifecycle, automatic ga.");
-    console.log("Meeru cheyalsindi 2 steps matrame.\n");
+    console.log("Kasuwright — from BRD to the full test lifecycle, automatically.");
+    console.log("You only do 2 steps.\n");
 
     // Step 1 — the BRD
     const candidates = findBrdCandidates(cwd);
     let brdPath: string | null = null;
     if (candidates.length > 0) {
-      console.log("Step 1: BRD file select cheyandi:");
+      console.log("Step 1: Choose your BRD file:");
       candidates.slice(0, 9).forEach((c, i) => console.log(`  ${i + 1}. ${c}`));
-      console.log("  (vere file ayithe daani path type cheyandi)");
+      console.log("  (for a different file, type its path)");
       const answer = await rl.question("Number (default 1): ");
       brdPath = pickCandidate(answer, candidates);
     } else {
-      const answer = await rl.question("Step 1: BRD file path ivvandi: ");
+      const answer = await rl.question("Step 1: Enter the BRD file path: ");
       brdPath = pickCandidate(answer, []);
     }
     if (!brdPath) {
-      throw new Error("BRD file dorakaledu. File path correct ga ivvandi, leka BRD unna folder nunchi run cheyandi.");
+      throw new Error("BRD file not found. Enter the correct path, or run Kasuwright from the folder that contains the BRD.");
     }
 
     // Step 2 — project key, Enter is enough
-    const keyAnswer = await rl.question("Step 2: Jira project key (default QA) — Enter kotandi: ");
+    const keyAnswer = await rl.question("Step 2: Jira project key (default QA) — just press Enter: ");
     const projectKey = keyAnswer.trim() || "QA";
 
-    console.log("\nAnthe — inka motham automatic. Run avuthundi...\n");
+    console.log("\nThat's it — everything else is automatic. Running...\n");
     const outDir = join(cwd, "runs", "latest");
     const summary = await runPipeline({ brdPath, outDir, projectKey, llm: llmFromEnv() });
 
-    console.log(`\nAyyindi -> ${summary.outDir}`);
+    console.log(`\nDone -> ${summary.outDir}`);
     for (const s of summary.stages) console.log(`  ${s.name}: ${s.detail}`);
     const report = join(outDir, "report.html");
-    console.log(`\nReport: ${report} (browser lo open avuthundi)`);
+    console.log(`\nReport: ${report} (opening in your browser)`);
     openInBrowser(report);
     return summary;
   } finally {
