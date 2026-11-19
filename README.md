@@ -1,8 +1,8 @@
-# Healwright
+# Kasuwright
 
 **Self-healing locators and failure analysis for Playwright suites.**
 
-UI changed, test broke, sprint slowed down — Healwright finds what your broken
+UI changed, test broke, sprint slowed down — Kasuwright finds what your broken
 locator *meant*, explains why tests fail, and flags flaky tests before they
 erode trust in the suite. It never edits a test silently: every heal is a
 suggestion a human approves.
@@ -16,8 +16,8 @@ suggestion a human approves.
 - **Playwright helpers** — `captureHints(page, selector)` and
   `healLocator(page, hints)` plug into a real Playwright project.
 - **Reporter** — a Playwright reporter that records every test result to
-  `.healwright/history.jsonl`.
-- **Analyzer CLI** — `healwright analyze` turns that history into a suite
+  `.kasuwright/history.jsonl`.
+- **Analyzer CLI** — `kasuwright analyze` turns that history into a suite
   health report: flaky tests (passed *and* failed across runs) first, then
   consistent failures, each with a plain-language likely cause.
 
@@ -26,7 +26,7 @@ suggestion a human approves.
 One command runs the whole test lifecycle:
 
 ```bash
-npx healwright pipeline --brd docs/BRD.md --out runs/latest --project QA
+npx kasuwright pipeline --brd docs/BRD.md --out runs/latest --project QA
 ```
 
 1. **BRD intake** — parses requirements + acceptance criteria from the BRD
@@ -59,13 +59,13 @@ npm test         # unit tests for the engine + analyzer
 Use the reporter in `playwright.config.ts`:
 
 ```ts
-reporter: [["healwright/reporter"], ["list"]]
+reporter: [["kasuwright/reporter"], ["list"]]
 ```
 
 Then after a few runs:
 
 ```bash
-npx healwright analyze
+npx kasuwright analyze
 ```
 
 ## Roadmap
