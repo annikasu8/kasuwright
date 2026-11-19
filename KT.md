@@ -2,7 +2,7 @@
 
 **Product:** Kasuwright (Kasu + Playwright) — AI-ready test automation toolkit
 **Owner / Author:** Anil Kasarla (annikasu8@gmail.com)
-**Current version:** 0.5.0 (19 Nov 2026)
+**Current version:** 0.6.0 (19 Nov 2026)
 **License:** MIT (open core)
 **Links:** npm — https://www.npmjs.com/package/kasuwright · GitHub — https://github.com/annikasu8/kasuwright
 
@@ -38,6 +38,7 @@ Kasuwright does two jobs for QA / SDET teams:
 | FR-11 | Record test-run history and flag flaky tests (same test passing and failing across runs) with a plain-language diagnosis and a Markdown suite-health report | `src/reporter.ts`, `src/analyze.ts` |
 | FR-12 | Optional LLM layer (any OpenAI-compatible endpoint): extract requirements from unstructured BRDs, design extra test cases, explain failures. Must fall back to the deterministic engines when no key is set or a call fails | `src/llm.ts`, `src/llm-features.ts` |
 | FR-14 | Jira loop closure: after a run with Jira connected, post an automatic comment on each created Story and attach the manual scenarios sheet, test data, automation spec, report.html and traceability matrix to the ticket | `src/jira.ts`, `src/pipeline.ts` |
+| FR-15 | Local web UI: `kasuwright ui` serves a browser page on 127.0.0.1 — BRD drag-and-drop or folder pick, Jira connect form (validated with a test-connection call, saved only in ~/.kasuwright/config.json, token never returned to the page), RUN with live stage progress, Jira links and the HTML report | `src/ui.ts` |
 | FR-13 | Zero-knowledge wizard: bare `kasuwright` auto-detects BRD files in the folder, asks only (1) which file and (2) project key (Enter = default), runs the pipeline and opens report.html | `src/wizard.ts` |
 
 ### 2.2 Non-functional requirements
@@ -104,6 +105,9 @@ npx kasuwright
 | 0.3.0 | 19 Nov 2026 | Optional LLM layer (`explain`, `llm-check`), first npm release |
 | 0.4.0 | 19 Nov 2026 | 2-step wizard as the default experience; report auto-opens |
 | 0.5.0 | 19 Nov 2026 | Jira loop closure — tickets carry acceptance criteria; runs auto-comment and attach artefacts back to the ticket (verified against a mock Jira) |
+| 0.5.1 | 19 Nov 2026 | Jira issue types resolved from the project's createmeta (team-managed Task/Subtask projects work) — bug found by the first external tester |
+| 0.5.2 | 19 Nov 2026 | Sub-tasks are created with their parent Story key (real Jira requires it) |
+| 0.6.0 | 19 Nov 2026 | Local web UI (`kasuwright ui`) — BRD drag-and-drop, one-time Jira form saved locally, live stage progress, report in the browser; no terminal skills needed |
 
 ## 7. Business status and next steps
 
