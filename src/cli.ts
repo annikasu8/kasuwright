@@ -7,6 +7,7 @@ import { runPipeline } from "./pipeline.js";
 import { llmFromEnv } from "./llm.js";
 import { analyzeFailureLLM } from "./llm-features.js";
 import { runWizard } from "./wizard.js";
+import { startUi } from "./ui.js";
 
 const [cmd, ...args] = process.argv.slice(2);
 const flag = (name: string) => {
@@ -23,6 +24,10 @@ async function main(): Promise<void> {
       return;
     }
     console.log("Kasuwright: interactive wizard ki terminal kavali. CI/scripts kosam: kasuwright pipeline --brd <BRD.md>");
+  }
+  if (cmd === "ui") {
+    await startUi(process.cwd());
+    return;
   }
   if (cmd === "pipeline") {
     const brd = flag("brd");
@@ -113,6 +118,7 @@ async function main(): Promise<void> {
 
 Commands:
   kasuwright                                       2-step wizard (BRD select -> Enter -> done)
+  kasuwright ui                                    Web UI in the browser — no terminal skills needed
   kasuwright pipeline --brd <BRD.md> [--out dir] [--project KEY]
       BRD -> Jira -> test cases -> test data -> framework -> automation
       -> traceability -> report -> email -> CI files
