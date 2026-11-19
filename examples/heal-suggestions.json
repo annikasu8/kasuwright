@@ -1,0 +1,47 @@
+{
+  "originalSelector": "#login-btn",
+  "status": "PENDING_APPROVAL — a human reviews and applies the fix; nothing is edited silently",
+  "candidates": [
+    {
+      "score": 100,
+      "tag": "button",
+      "text": "sign in",
+      "locators": [
+        "page.locator('#signin-button')",
+        "page.getByRole('button', { name: 'sign in' })",
+        "page.locator('button.cta.cta-main')"
+      ],
+      "reason": [
+        "tag <button> matches",
+        "visible text unchanged ('Sign in')",
+        "role 'button' matches"
+      ]
+    },
+    {
+      "score": 40,
+      "tag": "button",
+      "text": "create account",
+      "locators": [
+        "page.locator('#signup-button')",
+        "page.getByRole('button', { name: 'create account' })",
+        "page.locator('button.cta.ghost')"
+      ],
+      "reason": [
+        "tag <button> matches",
+        "role 'button' matches"
+      ]
+    },
+    {
+      "score": 30,
+      "tag": "html",
+      "text": "sign in forgot password? create account",
+      "locators": [
+        "page.getByText('sign in forgot password? create account')",
+        "page.locator('html')"
+      ],
+      "reason": [
+        "visible text partially matches"
+      ]
+    }
+  ]
+}
