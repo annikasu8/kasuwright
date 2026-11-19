@@ -14,3 +14,4 @@ export { runPipeline, type PipelineSummary } from "./pipeline.js";
 export { OpenAiCompatibleProvider, MockLlmProvider, llmFromEnv, chatJson, type LlmProvider, type LlmMessage } from "./llm.js";
 export { extractRequirementsLLM, designCasesLLM, analyzeFailureLLM, type FailureAnalysis } from "./llm-features.js";
 export { findBrdCandidates, pickCandidate, runWizard } from "./wizard.js";
+export { startUiServer, startUi, loadConfig, saveConfig, type UiConfig } from "./ui.js";
