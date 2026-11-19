@@ -78,3 +78,25 @@ npx kasuwright analyze
 ## License
 
 MIT
+
+## LLM layer (v0.3, optional)
+
+Kasuwright works fully offline with deterministic engines. Add an LLM and
+three stages get smarter — each with automatic fallback if the model call
+fails or returns unusable output:
+
+- **BRD understanding** — extracts requirements from unstructured prose BRDs
+  (no REQ-IDs needed) and merges them with the deterministic parse.
+- **AI test-case design** — richer positive/negative/boundary cases in the
+  same semantic step format, so they still compile to Playwright specs.
+- **Failure analyst** — `kasuwright explain <error.txt> [dom.html]` reads a
+  Playwright error + DOM snapshot and returns root cause, evidence and a fix.
+
+Any OpenAI-compatible endpoint works (OpenAI, Azure, Ollama, OpenRouter):
+
+```bash
+export KASUWRIGHT_LLM_API_KEY=sk-...
+export KASUWRIGHT_LLM_MODEL=gpt-4o-mini        # optional
+export KASUWRIGHT_LLM_BASE_URL=https://api.openai.com/v1   # optional
+npx kasuwright llm-check
+```
