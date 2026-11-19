@@ -3,7 +3,7 @@ export { captureHints, healLocator } from "./playwright.js";
 export { default as KasuwrightReporter, type RunRecord } from "./reporter.js";
 export { loadHistory, summarize, diagnose, renderReport, analyzeToFile, type TestStats } from "./analyze.js";
 export { parseBrd, type Requirement } from "./brd.js";
-export { toJiraIssues, toJiraPayloads, toJiraCsv, jiraConfigFromEnv, pushToJira, type JiraIssue } from "./jira.js";
+export { toJiraIssues, toJiraPayloads, toJiraCsv, jiraConfigFromEnv, pushToJira, addJiraComment, addJiraAttachment, publishRunToJira, type JiraIssue, type JiraConfig, type JiraPublishFile, type PublishResult } from "./jira.js";
 export { generateTestCases, testCasesToMarkdown, type TestCase, type TestStep } from "./testcases.js";
 export { generateDataSet, dataSetToCsv, dataSetToSql, inferFields } from "./testdata.js";
 export { scaffoldFramework, testCaseToSpec, stepToCode } from "./codegen.js";

@@ -9,10 +9,10 @@
  * fall back to export mode when env vars are absent — nothing is sent
  * anywhere without configuration.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseBrd } from "./brd.js";
-import { toJiraIssues, toJiraPayloads, toJiraCsv, jiraConfigFromEnv, pushToJira } from "./jira.js";
+import { toJiraIssues, toJiraPayloads, toJiraCsv, jiraConfigFromEnv, pushToJira, publishRunToJira, type JiraPublishFile } from "./jira.js";
 import { generateTestCases, testCasesToMarkdown } from "./testcases.js";
 import { generateDataSet, dataSetToCsv, dataSetToSql } from "./testdata.js";
 import { scaffoldFramework } from "./codegen.js";
@@ -61,9 +61,10 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
   put("jira/jira-payloads.json", JSON.stringify(toJiraPayloads(issues, projectKey), null, 2));
   put("jira/jira-import.csv", toJiraCsv(issues));
   const jiraCfg = jiraConfigFromEnv();
+  let createdKeys: string[] = [];
   if (jiraCfg) {
-    const keys = await pushToJira(issues, projectKey, jiraCfg);
-    stages.push({ name: "2. Jira", detail: `Created ${keys.length} issues in ${projectKey}: ${keys.join(", ")}` });
+    createdKeys = await pushToJira(issues, projectKey, jiraCfg);
+    stages.push({ name: "2. Jira", detail: `Created ${createdKeys.length} issues in ${projectKey}: ${createdKeys.join(", ")}` });
   } else {
     stages.push({ name: "2. Jira", detail: `${issues.length} issues exported (jira-payloads.json + jira-import.csv) — set JIRA_* env to create them directly` });
   }
@@ -85,7 +86,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
     cases = generateTestCases(reqs);
   }
   put("test-cases.json", JSON.stringify(cases, null, 2));
-  put("test-cases.md", testCasesToMarkdown(cases));
+  const casesMd = testCasesToMarkdown(cases);
+  put("test-cases.md", casesMd);
   stages.push({ name: "3. Manual test cases", detail: `${cases.length} cases generated (${caseNote}) — pending human review` });
 
   // 4 — Test data
@@ -118,7 +120,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
 
   // 8 — Traceability + report
   const traceRows = traceability(reqs, issues, cases);
-  put("traceability.md", traceabilityMarkdown(traceRows));
+  const traceMd = traceabilityMarkdown(traceRows);
+  put("traceability.md", traceMd);
   const html = renderHtmlReport({
     title: `Kasuwright E2E Run — ${projectKey}`,
     generatedAt: new Date().toISOString(),
@@ -150,6 +153,40 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
   put(".github/workflows/kasuwright.yml", githubActions());
   put("defects.json", JSON.stringify([], null, 2));
   stages.push({ name: "10. CI/CD", detail: "Jenkinsfile + GitHub Actions workflow generated; defects.json will collect auto-defects after test runs" });
+
+  // 11 — Jira publish-back: close the loop on each created Story — an
+  // automatic comment plus the run's artefacts attached to the ticket
+  // (manual scenarios sheet, test data, automation spec, report).
+  if (jiraCfg && createdKeys.length > 0) {
+    const published: string[] = [];
+    for (let i = 0; i < reqs.length; i++) {
+      const r = reqs[i];
+      const storyKey = createdKeys[i * 2]; // issues alternate Story, QA sub-task
+      if (!storyKey) continue;
+      const reqCases = cases.filter((c) => c.reqId === r.id);
+      const ds = dataSets.find((d) => d.reqId === r.id);
+      const specRel = join("framework", "tests", `${r.id.toLowerCase()}.spec.ts`);
+      const specPath = join(out, specRel);
+      const files: JiraPublishFile[] = [
+        { name: `manual-scenarios-${r.id.toLowerCase()}.md`, content: testCasesToMarkdown(reqCases) },
+        { name: "report.html", content: html },
+        { name: "traceability.md", content: traceMd },
+      ];
+      if (ds) files.push({ name: `test-data-${r.id.toLowerCase()}.csv`, content: dataSetToCsv(ds) });
+      if (existsSync(specPath)) files.push({ name: `${r.id.toLowerCase()}.spec.ts`, content: readFileSync(specPath, "utf8") });
+      const comment = [
+        `Kasuwright run complete for ${r.id} — ${r.title}`,
+        `Manual test scenarios: ${reqCases.length} cases (sheet attached)`,
+        ds ? `Test data: ${ds.rows.length} rows attached (valid/invalid/empty/boundary)` : "Test data: see attached files",
+        `Automation: Playwright spec attached (${r.id.toLowerCase()}.spec.ts)`,
+        "Full run report (report.html) and traceability matrix attached.",
+        "Status: Generated — pending human review.",
+      ].join("\n");
+      const res = await publishRunToJira(jiraCfg, storyKey, comment, files);
+      published.push(`${storyKey} (${res.attached.length} files${res.commented ? " + comment" : ""}${res.failed.length ? `, failed: ${res.failed.join(", ")}` : ""})`);
+    }
+    stages.push({ name: "11. Jira publish-back", detail: `Comments + artefacts posted to ${published.length} stories: ${published.join("; ")}` });
+  }
 
   const summary: PipelineSummary = { outDir: out, requirements: reqs.length, jiraIssues: issues.length, testCases: cases.length, stages };
   put("run-summary.json", JSON.stringify(summary, null, 2));

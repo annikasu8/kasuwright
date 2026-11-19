@@ -105,3 +105,61 @@ export async function pushToJira(issues: JiraIssue[], projectKey: string, cfg: J
   }
   return created;
 }
+
+function authHeader(cfg: JiraConfig): string {
+  return `Basic ${Buffer.from(`${cfg.email}:${cfg.apiToken}`).toString("base64")}`;
+}
+
+/** Add a plain-text comment (converted to ADF) to an existing issue. */
+export async function addJiraComment(cfg: JiraConfig, issueKey: string, text: string): Promise<void> {
+  const res = await fetch(`${cfg.baseUrl}/rest/api/3/issue/${issueKey}/comment`, {
+    method: "POST",
+    headers: { Authorization: authHeader(cfg), "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ body: adf(text) }),
+  });
+  if (!res.ok) throw new Error(`Jira comment failed (${res.status}): ${await res.text()}`);
+}
+
+/** Attach one file to an existing issue. */
+export async function addJiraAttachment(cfg: JiraConfig, issueKey: string, name: string, content: string | Buffer): Promise<void> {
+  const form = new FormData();
+  form.append("file", new Blob([content as any]), name);
+  const res = await fetch(`${cfg.baseUrl}/rest/api/3/issue/${issueKey}/attachments`, {
+    method: "POST",
+    headers: { Authorization: authHeader(cfg), "X-Atlassian-Token": "no-check", Accept: "application/json" },
+    body: form,
+  });
+  if (!res.ok) throw new Error(`Jira attachment ${name} failed (${res.status}): ${await res.text()}`);
+}
+
+export interface JiraPublishFile { name: string; content: string }
+export interface PublishResult { issueKey: string; commented: boolean; attached: string[]; failed: string[] }
+
+/**
+ * Close the loop on one issue: post the run comment, then attach the run's
+ * artefacts (manual scenarios, test data, automation specs, report).
+ * A failed file never fails the publish — it is reported in `failed`.
+ */
+export async function publishRunToJira(
+  cfg: JiraConfig,
+  issueKey: string,
+  comment: string,
+  files: JiraPublishFile[],
+): Promise<PublishResult> {
+  const result: PublishResult = { issueKey, commented: false, attached: [], failed: [] };
+  try {
+    await addJiraComment(cfg, issueKey, comment);
+    result.commented = true;
+  } catch {
+    result.failed.push("comment");
+  }
+  for (const f of files) {
+    try {
+      await addJiraAttachment(cfg, issueKey, f.name, f.content);
+      result.attached.push(f.name);
+    } catch {
+      result.failed.push(f.name);
+    }
+  }
+  return result;
+}
