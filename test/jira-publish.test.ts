@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runPipeline } from "../src/pipeline.js";
 
-interface Seen { creates: number; comments: string[]; attachments: string[] }
+interface Seen { creates: number; comments: string[]; attachments: string[]; issueTypes: string[] }
 
 async function fakeJira(seen: Seen): Promise<{ server: Server; url: string }> {
   const server = createServer((req, res) => {
@@ -14,8 +14,17 @@ async function fakeJira(seen: Seen): Promise<{ server: Server; url: string }> {
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       const u = req.url ?? "";
-      if (req.method === "POST" && u === "/rest/api/3/issue") {
+      if (req.method === "GET" && u.startsWith("/rest/api/3/issue/createmeta")) {
+        // Team-managed style project: no "Story", child type spelled "Subtask"
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ projects: [{ issuetypes: [
+          { name: "Task", subtask: false },
+          { name: "Bug", subtask: false },
+          { name: "Subtask", subtask: true },
+        ] }] }));
+      } else if (req.method === "POST" && u === "/rest/api/3/issue") {
         seen.creates++;
+        try { seen.issueTypes.push(JSON.parse(body).fields.issuetype.name); } catch { /* ignore */ }
         res.writeHead(201, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ key: `QA-${seen.creates}` }));
       } else if (req.method === "POST" && /\/issue\/[^/]+\/comment$/.test(u)) {
@@ -37,7 +46,7 @@ async function fakeJira(seen: Seen): Promise<{ server: Server; url: string }> {
 }
 
 test("pipeline closes the Jira loop: creates, comments and attaches artefacts", async () => {
-  const seen: Seen = { creates: 0, comments: [], attachments: [] };
+  const seen: Seen = { creates: 0, comments: [], attachments: [], issueTypes: [] };
   const { server, url } = await fakeJira(seen);
   const prev = { ...process.env };
   process.env.JIRA_BASE_URL = url;
@@ -50,6 +59,9 @@ test("pipeline closes the Jira loop: creates, comments and attaches artefacts", 
     const summary = await runPipeline({ brdPath: brd, outDir: join(dir, "run"), projectKey: "QA" });
     assert.equal(seen.creates % 2, 0); // Story + QA sub-task per requirement
     assert.ok(seen.creates >= 2);
+    // Issue types resolved against the project: "Task" (no Story) + "Subtask" spelling
+    assert.ok(seen.issueTypes.includes("Task"), `expected Task in ${seen.issueTypes}`);
+    assert.ok(seen.issueTypes.includes("Subtask"), `expected Subtask in ${seen.issueTypes}`);
     assert.ok(seen.comments.length >= 1); // publish-back on each Story
     assert.match(seen.comments[0], /Kasuwright run complete/);
     const names = seen.attachments.join(" ");
