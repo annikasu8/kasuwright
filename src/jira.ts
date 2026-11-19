@@ -177,7 +177,7 @@ export async function addJiraAttachment(cfg: JiraConfig, issueKey: string, name:
   if (!res.ok) throw new Error(`Jira attachment ${name} failed (${res.status}): ${await res.text()}`);
 }
 
-export interface JiraPublishFile { name: string; content: string }
+export interface JiraPublishFile { name: string; content: string | Buffer }
 export interface PublishResult { issueKey: string; commented: boolean; attached: string[]; failed: string[] }
 
 /**

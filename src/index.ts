@@ -15,3 +15,5 @@ export { OpenAiCompatibleProvider, MockLlmProvider, llmFromEnv, chatJson, type L
 export { extractRequirementsLLM, designCasesLLM, analyzeFailureLLM, type FailureAnalysis } from "./llm-features.js";
 export { findBrdCandidates, pickCandidate, runWizard } from "./wizard.js";
 export { startUiServer, startUi, loadConfig, saveConfig, type UiConfig } from "./ui.js";
+export { executeCases, type CaseExecution, type StepRecord, type ExecuteOptions } from "./execute.js";
+export { buildEvidenceWorkbook } from "./evidence.js";

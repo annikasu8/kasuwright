@@ -93,6 +93,8 @@ a{color:var(--acc)}
 <p class="mut" style="margin:8px 0 0">Details are saved only on this computer (~/.kasuwright/config.json). Your token is never sent anywhere except Atlassian.</p>
 </div>
 <div style="margin-top:12px"><label>Report email — the run report is addressed to</label><input id="remail" placeholder="annikasu8@gmail.com"></div>
+<div style="margin-top:10px"><label><input type="checkbox" id="exec" style="width:auto"> Run the tests in a browser &amp; capture a screenshot at every step (Excel proof for manual testers)</label>
+<div id="execform" class="hidden"><label>Application URL — the app to test</label><input id="appurl" placeholder="https://your-app.example.com/login"></div></div>
 </div>
 
 <button id="run">RUN — full pipeline</button>
@@ -115,6 +117,7 @@ $("drop").addEventListener("drop",function(e){e.preventDefault();this.classList.
 $("file").addEventListener("change",function(){if(this.files.length)readFile(this.files[0])});
 function readFile(f){var r=new FileReader();r.onload=function(){$("brd").value=r.result;brdFromFile=f.name;$("fname").textContent="Loaded: "+f.name;$("cand").value=""};r.readAsText(f)}
 $("usejira").addEventListener("change",function(){$("jiraform").classList.toggle("hidden",!this.checked)});
+$("exec").addEventListener("change",function(){$("execform").classList.toggle("hidden",!this.checked)});
 function jiraBody(){return {baseUrl:$("jurl").value.trim(),email:$("jemail").value.trim(),apiToken:$("jtoken").value.trim(),projectKey:$("jkey").value.trim()}}
 $("testbtn").addEventListener("click",function(){
   $("testout").textContent="Testing...";
@@ -126,7 +129,7 @@ $("testbtn").addEventListener("click",function(){
 });
 $("run").addEventListener("click",function(){
   var useJira=$("usejira").checked;
-  var body={brdText:$("brd").value,brdPath:$("cand").value,projectKey:($("jkey").value.trim()||"QA"),jira:useJira?jiraBody():null,reportEmail:$("remail").value.trim()};
+  var body={brdText:$("brd").value,brdPath:$("cand").value,projectKey:($("jkey").value.trim()||"QA"),jira:useJira?jiraBody():null,reportEmail:$("remail").value.trim(),execute:$("exec").checked?{baseUrl:$("appurl").value.trim()}:null};
   if(!body.brdText && !body.brdPath){alert("Add a BRD file first (drop / select / paste)");return}
   $("run").disabled=true;$("progress").classList.remove("hidden");$("stages").innerHTML="";$("done").innerHTML='<span class="mut">Running...</span>';
   fetch("/api/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
@@ -137,7 +140,8 @@ $("run").addEventListener("click",function(){
         $("stages").innerHTML=s.stages.map(function(x){return '<div class="stage"><b>'+x.name+'</b><span>'+x.detail+"</span></div>"}).join("");
         if(s.status==="done"){clearInterval(timer);$("run").disabled=false;
           var links=(s.summary.jiraCreated||[]).map(function(k){return s.jiraBaseUrl?'<a href="'+s.jiraBaseUrl+"/browse/"+k+'" target="_blank">'+k+"</a>":k}).join(", ");
-          $("done").innerHTML='<span class="ok">Done!</span> '+s.summary.requirements+" requirements, "+s.summary.testCases+" test cases. "+(links?"Jira: "+links+" ":"")+'<div style="margin-top:10px"><a href="/report/'+s.id+'" target="_blank"><button type="button">Open report</button></a></div>';
+          var ev=s.summary.evidence?'<div style="margin-top:8px">Execution evidence: '+s.summary.evidence.screenshots+" screenshots across "+s.summary.evidence.steps+' steps. <a href="/evidence/'+s.id+'"><button type="button">Download Excel evidence</button></a></div>':"";
+          $("done").innerHTML='<span class="ok">Done!</span> '+s.summary.requirements+" requirements, "+s.summary.testCases+" test cases. "+(links?"Jira: "+links+" ":"")+'<div style="margin-top:10px"><a href="/report/'+s.id+'" target="_blank"><button type="button">Open report</button></a></div>'+ev;
         } else if(s.status==="error"){clearInterval(timer);$("run").disabled=false;$("done").innerHTML='<span class="err">Error: '+s.error+"</span>"}
       });
     },700);
@@ -238,6 +242,7 @@ export function startUiServer(dir: string, port = 0): Promise<UiServer> {
               projectKey,
               jira,
               reportEmail: String(b.reportEmail || "") || undefined,
+              execute: b.execute?.baseUrl ? { baseUrl: String(b.execute.baseUrl) } : null,
               onStage: (s) => state.stages.push(s),
             });
             state.status = "done";
@@ -251,6 +256,13 @@ export function startUiServer(dir: string, port = 0): Promise<UiServer> {
         const st = runs.get(url.pathname.slice("/api/run/".length));
         if (!st) return json(404, { error: "run not found" });
         json(200, st);
+      } else if (req.method === "GET" && url.pathname.startsWith("/evidence/")) {
+        const id = url.pathname.slice("/evidence/".length);
+        if (!/^ui-[\w-]+$/.test(id)) return json(400, { error: "bad id" });
+        const p = join(dir, "runs", id, "evidence.xlsx");
+        if (!existsSync(p)) return json(404, { error: "no evidence workbook for this run" });
+        res.writeHead(200, { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": 'attachment; filename="kasuwright-evidence.xlsx"' });
+        res.end(readFileSync(p));
       } else if (req.method === "GET" && url.pathname.startsWith("/report/")) {
         const id = url.pathname.slice("/report/".length);
         if (!/^ui-[\w-]+$/.test(id)) return json(400, { error: "bad id" });

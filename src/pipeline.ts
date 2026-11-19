@@ -18,6 +18,8 @@ import { generateDataSet, dataSetToCsv, dataSetToSql } from "./testdata.js";
 import { scaffoldFramework } from "./codegen.js";
 import { traceability, traceabilityMarkdown, renderHtmlReport, buildEml, smtpConfigFromEnv, sendViaSmtp } from "./enterprise.js";
 import { jenkinsfile, githubActions } from "./ci.js";
+import { executeCases } from "./execute.js";
+import { buildEvidenceWorkbook } from "./evidence.js";
 import type { LlmProvider } from "./llm.js";
 import { extractRequirementsLLM, designCasesLLM } from "./llm-features.js";
 
@@ -30,11 +32,13 @@ export interface PipelineOptions {
   jira?: JiraConfig | null;
   /** Recipient for the report email. Falls back to REPORT_EMAIL_TO, then the default below. */
   reportEmail?: string;
+  /** When set, execute the generated cases in a real browser and build the Excel screenshot-evidence workbook. */
+  execute?: { baseUrl: string } | null;
   /** Called as each stage completes (live progress for the web UI). */
   onStage?: (s: StageResult) => void;
 }
 export interface StageResult { name: string; detail: string }
-export interface PipelineSummary { outDir: string; requirements: number; jiraIssues: number; testCases: number; stages: StageResult[]; jiraCreated?: string[] }
+export interface PipelineSummary { outDir: string; requirements: number; jiraIssues: number; testCases: number; stages: StageResult[]; jiraCreated?: string[]; evidence?: { casesRun: number; steps: number; screenshots: number; workbook: string } }
 
 export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummary> {
   const projectKey = opts.projectKey ?? "QA";
@@ -166,7 +170,28 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
   put("defects.json", JSON.stringify([], null, 2));
   push({ name: "10. CI/CD", detail: "Jenkinsfile + GitHub Actions workflow generated; defects.json will collect auto-defects after test runs" });
 
-  // 11 — Jira publish-back: close the loop on each created Story — an
+  // 11 — Execution evidence (optional): run the generated cases in a real
+  // browser, screenshot every step, and compile the Excel proof workbook
+  // manual testers asked for.
+  let evidenceInfo: PipelineSummary["evidence"];
+  let evidencePath = "";
+  if (opts.execute?.baseUrl) {
+    const executions = await executeCases(cases, { baseUrl: opts.execute.baseUrl, data: namedSets as Record<string, unknown>, outDir: join(out, "evidence") });
+    if (!executions) {
+      push({ name: "11. Execution evidence", detail: "Playwright is not installed in this project — screenshots skipped. One-time setup: npm i -D @playwright/test && npx playwright install chromium" });
+    } else {
+      evidencePath = join(out, "evidence.xlsx");
+      await buildEvidenceWorkbook(executions, evidencePath, `Kasuwright execution evidence — ${projectKey} — ${new Date().toISOString()}`);
+      const shots = executions.reduce((n, e) => n + e.steps.filter((s) => s.screenshot).length, 0);
+      const steps = executions.reduce((n, e) => n + e.steps.length, 0);
+      const failed = executions.reduce((n, e) => n + e.steps.filter((s) => s.status === "fail").length, 0);
+      evidenceInfo = { casesRun: executions.length, steps, screenshots: shots, workbook: "evidence.xlsx" };
+      put("evidence-summary.json", JSON.stringify(evidenceInfo, null, 2));
+      push({ name: "11. Execution evidence", detail: `${executions.length} cases executed against ${opts.execute.baseUrl} — ${steps} steps, ${shots} screenshots, ${failed} failed steps; evidence.xlsx built` });
+    }
+  }
+
+  // 12 — Jira publish-back: close the loop on each created Story — an
   // automatic comment plus the run's artefacts attached to the ticket
   // (manual scenarios sheet, test data, automation spec, report).
   if (jiraCfg && createdKeys.length > 0) {
@@ -186,6 +211,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
       ];
       if (ds) files.push({ name: `test-data-${r.id.toLowerCase()}.csv`, content: dataSetToCsv(ds) });
       if (existsSync(specPath)) files.push({ name: `${r.id.toLowerCase()}.spec.ts`, content: readFileSync(specPath, "utf8") });
+      if (i === 0 && evidencePath && existsSync(evidencePath)) files.push({ name: "evidence.xlsx", content: readFileSync(evidencePath) });
       const comment = [
         `Kasuwright run complete for ${r.id} — ${r.title}`,
         `Manual test scenarios: ${reqCases.length} cases (sheet attached)`,
@@ -197,10 +223,10 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
       const res = await publishRunToJira(jiraCfg, storyKey, comment, files);
       published.push(`${storyKey} (${res.attached.length} files${res.commented ? " + comment" : ""}${res.failed.length ? `, failed: ${res.failed.join(", ")}` : ""})`);
     }
-    push({ name: "11. Jira publish-back", detail: `Comments + artefacts posted to ${published.length} stories: ${published.join("; ")}` });
+    push({ name: "12. Jira publish-back", detail: `Comments + artefacts posted to ${published.length} stories: ${published.join("; ")}` });
   }
 
-  const summary: PipelineSummary = { outDir: out, requirements: reqs.length, jiraIssues: issues.length, testCases: cases.length, stages, jiraCreated: createdKeys };
+  const summary: PipelineSummary = { outDir: out, requirements: reqs.length, jiraIssues: issues.length, testCases: cases.length, stages, jiraCreated: createdKeys, evidence: evidenceInfo };
   put("run-summary.json", JSON.stringify(summary, null, 2));
   return summary;
 }
