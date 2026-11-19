@@ -71,26 +71,26 @@ a{color:var(--acc)}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .hidden{display:none}
 </style></head><body><div class="wrap">
-<h1>Kasuwright</h1><p class="sub">BRD nunchi full test lifecycle — automatic. Meeru cheyalsindi: BRD ivvadam, RUN nokkadam.</p>
+<h1>Kasuwright</h1><p class="sub">From BRD to the full test lifecycle — automatic. You just add the BRD and press RUN.</p>
 
 <div class="card"><h2>Step 1 — BRD file</h2>
-<div id="drop">BRD file ni ikkada drop cheyandi, leda click chesi select cheyandi (.md / .txt)<input type="file" id="file" accept=".md,.txt,.markdown" class="hidden"></div>
-<div class="row" style="margin-top:10px"><span class="mut">Leda ee folder lo unna BRD:</span><select id="cand" style="width:auto;flex:1"><option value="">— select —</option></select></div>
+<div id="drop">Drop your BRD file here, or click to select it (.md / .txt)<input type="file" id="file" accept=".md,.txt,.markdown" class="hidden"></div>
+<div class="row" style="margin-top:10px"><span class="mut">Or pick a BRD from this folder:</span><select id="cand" style="width:auto;flex:1"><option value="">— select —</option></select></div>
 <div id="fname" class="mut"></div>
-<textarea id="brd" placeholder="BRD text ikkada kanipistundi — kavali ante edit cheyachu"></textarea>
+<textarea id="brd" placeholder="Your BRD text appears here — you can edit it if needed"></textarea>
 </div>
 
 <div class="card"><h2>Step 2 — Jira (optional)</h2>
-<label><input type="checkbox" id="usejira" style="width:auto"> Jira ki direct ga tickets create chey</label>
+<label><input type="checkbox" id="usejira" style="width:auto"> Create tickets directly in Jira</label>
 <div id="jiraform" class="hidden">
 <div class="grid">
 <div><label>Jira site URL</label><input id="jurl" placeholder="https://yourteam.atlassian.net"></div>
 <div><label>Project key</label><input id="jkey" placeholder="KAN"></div>
 <div><label>Jira login email</label><input id="jemail" placeholder="you@company.com"></div>
-<div><label>API token (id.atlassian.com lo create cheyali)</label><input id="jtoken" type="password" placeholder="ATATT..."></div>
+<div><label>API token (create one at id.atlassian.com)</label><input id="jtoken" type="password" placeholder="ATATT..."></div>
 </div>
 <div class="row"><button class="ghost" id="testbtn" type="button">Test connection</button><span id="testout" class="mut"></span></div>
-<p class="mut" style="margin:8px 0 0">Details ee computer lone save avuthayi (~/.kasuwright/config.json). Token evariki pampabadadu.</p>
+<p class="mut" style="margin:8px 0 0">Details are saved only on this computer (~/.kasuwright/config.json). Your token is never sent anywhere except Atlassian.</p>
 </div></div>
 
 <button id="run">RUN — full pipeline</button>
@@ -101,7 +101,7 @@ var brdFromFile = "";
 function $(id){return document.getElementById(id)}
 fetch("/api/state").then(function(r){return r.json()}).then(function(s){
   s.candidates.forEach(function(c){var o=document.createElement("option");o.value=c.path;o.textContent=c.name;$("cand").appendChild(o)});
-  if(s.jira){$("usejira").checked=true;$("jiraform").classList.remove("hidden");$("jurl").value=s.jira.baseUrl||"";$("jemail").value=s.jira.email||"";$("jkey").value=s.projectKey||"";if(s.jira.hasToken)$("jtoken").placeholder="•••••• saved — kothadi ivvakapothe ade vaduthundi"}
+  if(s.jira){$("usejira").checked=true;$("jiraform").classList.remove("hidden");$("jurl").value=s.jira.baseUrl||"";$("jemail").value=s.jira.email||"";$("jkey").value=s.projectKey||"";if(s.jira.hasToken)$("jtoken").placeholder="•••••• saved — leave blank to keep using it"}
   if(s.projectKey && !$("jkey").value)$("jkey").value=s.projectKey;
 });
 $("cand").addEventListener("change",function(){ if(this.value){$("fname").textContent="Selected: "+this.options[this.selectedIndex].textContent; $("brd").value=""; brdFromFile="";} });
@@ -124,17 +124,17 @@ $("testbtn").addEventListener("click",function(){
 $("run").addEventListener("click",function(){
   var useJira=$("usejira").checked;
   var body={brdText:$("brd").value,brdPath:$("cand").value,projectKey:($("jkey").value.trim()||"QA"),jira:useJira?jiraBody():null};
-  if(!body.brdText && !body.brdPath){alert("Mundu BRD file ivvandi (drop / select / paste)");return}
+  if(!body.brdText && !body.brdPath){alert("Add a BRD file first (drop / select / paste)");return}
   $("run").disabled=true;$("progress").classList.remove("hidden");$("stages").innerHTML="";$("done").innerHTML='<span class="mut">Running...</span>';
   fetch("/api/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
   .then(function(r){return r.json()}).then(function(d){
-    if(!d.runId){$("done").innerHTML='<span class="err">'+(d.error||"run start kaledu")+"</span>";$("run").disabled=false;return}
+    if(!d.runId){$("done").innerHTML='<span class="err">'+(d.error||"the run could not start")+"</span>";$("run").disabled=false;return}
     var timer=setInterval(function(){
       fetch("/api/run/"+d.runId).then(function(r){return r.json()}).then(function(s){
         $("stages").innerHTML=s.stages.map(function(x){return '<div class="stage"><b>'+x.name+'</b><span>'+x.detail+"</span></div>"}).join("");
         if(s.status==="done"){clearInterval(timer);$("run").disabled=false;
           var links=(s.summary.jiraCreated||[]).map(function(k){return s.jiraBaseUrl?'<a href="'+s.jiraBaseUrl+"/browse/"+k+'" target="_blank">'+k+"</a>":k}).join(", ");
-          $("done").innerHTML='<span class="ok">Ayyindi!</span> '+s.summary.requirements+" requirements, "+s.summary.testCases+" test cases. "+(links?"Jira: "+links+" ":"")+'<div style="margin-top:10px"><a href="/report/'+s.id+'" target="_blank"><button type="button">Report open chey</button></a></div>';
+          $("done").innerHTML='<span class="ok">Done!</span> '+s.summary.requirements+" requirements, "+s.summary.testCases+" test cases. "+(links?"Jira: "+links+" ":"")+'<div style="margin-top:10px"><a href="/report/'+s.id+'" target="_blank"><button type="button">Open report</button></a></div>';
         } else if(s.status==="error"){clearInterval(timer);$("run").disabled=false;$("done").innerHTML='<span class="err">Error: '+s.error+"</span>"}
       });
     },700);
@@ -185,11 +185,11 @@ export function startUiServer(dir: string, port = 0): Promise<UiServer> {
           email: String(b.email ?? ""),
           apiToken: String(b.apiToken ?? "") || saved.jira?.apiToken || "",
         };
-        if (!cfg.baseUrl || !cfg.email || !cfg.apiToken) return json(200, { ok: false, error: "URL, email, token — anni ivvandi" });
+        if (!cfg.baseUrl || !cfg.email || !cfg.apiToken) return json(200, { ok: false, error: "URL, email and token are all required" });
         const r = await fetch(cfg.baseUrl + "/rest/api/3/myself", {
           headers: { Authorization: "Basic " + Buffer.from(cfg.email + ":" + cfg.apiToken).toString("base64"), Accept: "application/json" },
         });
-        if (!r.ok) return json(200, { ok: false, error: "Jira connect kaledu (" + r.status + ") — details check cheyandi" });
+        if (!r.ok) return json(200, { ok: false, error: "Could not connect to Jira (" + r.status + ") — check the details" });
         const me = (await r.json()) as { displayName?: string };
         const types = await resolveIssueTypes(cfg, String(b.projectKey || "QA"));
         json(200, { ok: true, name: me.displayName ?? cfg.email, types: "Story type: " + types.story + ", sub-task: " + (types.sub ?? "—") });
@@ -201,11 +201,11 @@ export function startUiServer(dir: string, port = 0): Promise<UiServer> {
         let brdPath = String(b.brdPath ?? "");
         if (!brdPath) {
           const text = String(b.brdText ?? "");
-          if (!text.trim()) return json(400, { error: "BRD text ledu" });
+          if (!text.trim()) return json(400, { error: "No BRD text provided" });
           brdPath = join(outDir, "brd.md");
           writeFileSync(brdPath, text);
         } else if (!existsSync(brdPath)) {
-          return json(400, { error: "BRD file dorakaledu: " + brdPath });
+          return json(400, { error: "BRD file not found: " + brdPath });
         }
         let jira: JiraConfig | null = null;
         const saved = loadConfig();
@@ -267,7 +267,7 @@ export function startUiServer(dir: string, port = 0): Promise<UiServer> {
 export async function startUi(dir: string): Promise<void> {
   const { url } = await startUiServer(dir, 4321).catch(() => startUiServer(dir, 0));
   console.log(`Kasuwright UI: ${url}`);
-  console.log("Page browser lo open avuthundi. Aapali ante Ctrl+C.");
+  console.log("The page is opening in your browser. Press Ctrl+C to stop.");
   openInBrowser(url);
   await new Promise(() => { /* run until Ctrl+C */ });
 }
