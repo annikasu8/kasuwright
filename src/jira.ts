@@ -128,11 +128,16 @@ export async function pushToJira(issues: JiraIssue[], projectKey: string, cfg: J
   const auth = Buffer.from(`${cfg.email}:${cfg.apiToken}`).toString("base64");
   const types = await resolveIssueTypes(cfg, projectKey);
   const created: string[] = [];
+  const keyByRef = new Map<string, string>();
   for (const payload of toJiraPayloads(issues, projectKey)) {
     const { kasuwrightRef, parentRef, ...body } = payload as any;
-    void kasuwrightRef; void parentRef; // sub-task parenting resolved by caller once real keys exist
     // Map our logical types onto names this project actually accepts.
     body.fields.issuetype = { name: payload.fields.issuetype.name === "Sub-task" ? (types.sub ?? types.story) : types.story };
+    // Real Jira rejects a sub-task with no parent — link it to the Story
+    // created just before it (payloads are ordered Story, sub-task, ...).
+    if (parentRef && keyByRef.has(parentRef)) {
+      body.fields.parent = { key: keyByRef.get(parentRef) };
+    }
     const res = await fetch(`${cfg.baseUrl}/rest/api/3/issue`, {
       method: "POST",
       headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json", Accept: "application/json" },
@@ -141,6 +146,7 @@ export async function pushToJira(issues: JiraIssue[], projectKey: string, cfg: J
     if (!res.ok) throw new Error(`Jira create failed (${res.status}): ${await res.text()}`);
     const json = (await res.json()) as { key: string };
     created.push(json.key);
+    if (kasuwrightRef) keyByRef.set(kasuwrightRef, json.key);
   }
   return created;
 }
