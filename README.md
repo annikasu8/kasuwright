@@ -39,6 +39,16 @@ each ticket and attaches the manual scenarios sheet, the test data, the
 automation spec and the report to the ticket. Power users and
 CI can still drive every stage with flags — see `kasuwright pipeline --help`.
 
+**Prefer a web page over the terminal? (v0.6)**
+
+```bash
+npx kasuwright ui
+```
+
+A page opens in your browser: drop in the BRD file, fill the Jira form once
+(saved on your own machine), press RUN, watch the stages live, and open the
+report — no terminal skills needed.
+
 ## The E2E pipeline (v0.2)
 
 One command runs the whole test lifecycle:
