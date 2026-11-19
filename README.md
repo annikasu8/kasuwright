@@ -21,6 +21,21 @@ suggestion a human approves.
   health report: flaky tests (passed *and* failed across runs) first, then
   consistent failures, each with a plain-language likely cause.
 
+
+## Quick start — 2 steps, nothing to learn
+
+```bash
+npx kasuwright
+```
+
+Step 1: pick your BRD file (Kasuwright finds it in the folder automatically).
+Step 2: press Enter.
+
+Everything else is automatic: Jira tickets, test cases, test data, the
+Playwright framework, automation specs, traceability, the HTML report
+(opens in your browser), the email draft and the CI files. Power users and
+CI can still drive every stage with flags — see `kasuwright pipeline --help`.
+
 ## The E2E pipeline (v0.2)
 
 One command runs the whole test lifecycle:
