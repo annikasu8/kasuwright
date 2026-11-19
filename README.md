@@ -49,6 +49,15 @@ A page opens in your browser: drop in the BRD file, fill the Jira form once
 (saved on your own machine), press RUN, watch the stages live, and open the
 report — no terminal skills needed.
 
+**Screenshot evidence for manual testers (v0.7):** tick "Run the tests in a
+browser" in the UI (or pass `--url <app-url>` to the pipeline) and
+Kasuwright executes the generated cases in a real browser, captures a
+screenshot at **every step** — open URL, fill field, click button — and
+builds **evidence.xlsx**: a Summary sheet plus one sheet per test case with
+step descriptions, statuses and the screenshots embedded. The workbook is
+also attached to the Jira Story. One-time setup in the project:
+`npm i -D @playwright/test && npx playwright install chromium`.
+
 ## The E2E pipeline (v0.2)
 
 One command runs the whole test lifecycle:
