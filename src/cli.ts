@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   if (cmd === "pipeline") {
     const brd = flag("brd");
     if (!brd) {
-      console.error("Usage: healwright pipeline --brd <BRD.md> [--out runs/latest] [--project QA]");
+      console.error("Usage: kasuwright pipeline --brd <BRD.md> [--out runs/latest] [--project QA]");
       process.exit(2);
     }
     const summary = await runPipeline({
@@ -23,13 +23,13 @@ async function main(): Promise<void> {
       outDir: flag("out") ?? join(process.cwd(), "runs", "latest"),
       projectKey: flag("project") ?? "QA",
     });
-    console.log(`\nHealwright E2E pipeline complete -> ${summary.outDir}`);
+    console.log(`\nKasuwright E2E pipeline complete -> ${summary.outDir}`);
     for (const s of summary.stages) console.log(`  ${s.name}: ${s.detail}`);
     return;
   }
   if (cmd === "analyze") {
-    const history = args[0] ?? join(process.cwd(), ".healwright", "history.jsonl");
-    const out = args[1] ?? join(process.cwd(), ".healwright", "report.md");
+    const history = args[0] ?? join(process.cwd(), ".kasuwright", "history.jsonl");
+    const out = args[1] ?? join(process.cwd(), ".kasuwright", "report.md");
     const report = analyzeToFile(history, out);
     console.log(report);
     console.error(`Report written to ${out}`);
@@ -38,7 +38,7 @@ async function main(): Promise<void> {
   if (cmd === "heal") {
     const [htmlFile, hintsFile, outFile] = args;
     if (!htmlFile || !hintsFile) {
-      console.error("Usage: healwright heal <page.html> <hints.json> [suggestions.json]");
+      console.error("Usage: kasuwright heal <page.html> <hints.json> [suggestions.json]");
       process.exit(2);
     }
     const html = readFileSync(htmlFile, "utf8");
@@ -47,7 +47,7 @@ async function main(): Promise<void> {
     const suggestion = {
       originalSelector: hints.originalSelector ?? null,
       generatedAt: new Date().toISOString(),
-      status: "PENDING_APPROVAL — Healwright never edits tests silently",
+      status: "PENDING_APPROVAL — Kasuwright never edits tests silently",
       candidates,
     };
     const out = outFile ?? "heal-suggestions.json";
@@ -56,14 +56,14 @@ async function main(): Promise<void> {
     console.error(`Suggestions written to ${out} for human approval.`);
     return;
   }
-  console.log(`Healwright — E2E test lifecycle automation for Playwright teams
+  console.log(`Kasuwright — E2E test lifecycle automation for Playwright teams
 
 Commands:
-  healwright pipeline --brd <BRD.md> [--out dir] [--project KEY]
+  kasuwright pipeline --brd <BRD.md> [--out dir] [--project KEY]
       BRD -> Jira -> test cases -> test data -> framework -> automation
       -> traceability -> report -> email -> CI files
-  healwright analyze [history.jsonl] [report.md]   Suite health + flaky report
-  healwright heal <page.html> <hints.json> [out]   Find what a broken locator meant
+  kasuwright analyze [history.jsonl] [report.md]   Suite health + flaky report
+  kasuwright heal <page.html> <hints.json> [out]   Find what a broken locator meant
 `);
 }
 

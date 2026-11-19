@@ -1,6 +1,6 @@
 export { findCandidates, type ElementHints, type HealCandidate } from "./healer.js";
 export { captureHints, healLocator } from "./playwright.js";
-export { default as HealwrightReporter, type RunRecord } from "./reporter.js";
+export { default as KasuwrightReporter, type RunRecord } from "./reporter.js";
 export { loadHistory, summarize, diagnose, renderReport, analyzeToFile, type TestStats } from "./analyze.js";
 export { parseBrd, type Requirement } from "./brd.js";
 export { toJiraIssues, toJiraPayloads, toJiraCsv, jiraConfigFromEnv, pushToJira, type JiraIssue } from "./jira.js";

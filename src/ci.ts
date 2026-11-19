@@ -17,7 +17,7 @@ export function jenkinsfile(): string {
     stage('Checkout') { steps { checkout scm } }
     stage('Install') { steps { sh 'npm ci' } }
     stage('E2E Pipeline: BRD -> Framework') {
-      steps { sh 'npx healwright pipeline --brd docs/BRD.md --out runs/latest --project QA' }
+      steps { sh 'npx kasuwright pipeline --brd docs/BRD.md --out runs/latest --project QA' }
     }
     stage('Automation Testing') {
       steps {
@@ -30,14 +30,14 @@ export function jenkinsfile(): string {
     stage('Reports') {
       steps {
         archiveArtifacts artifacts: 'runs/latest/report.html, runs/latest/traceability.md', fingerprint: true
-        publishHTML(target: [reportName: 'Healwright Report', reportDir: 'runs/latest', reportFiles: 'report.html'])
+        publishHTML(target: [reportName: 'Kasuwright Report', reportDir: 'runs/latest', reportFiles: 'report.html'])
       }
     }
   }
   post {
     always {
-      // Healwright writes report.eml every run; with SMTP_* env set it sends directly.
-      echo 'Healwright report generated and emailed (see runs/latest/report.eml if SMTP is not configured).'
+      // Kasuwright writes report.eml every run; with SMTP_* env set it sends directly.
+      echo 'Kasuwright report generated and emailed (see runs/latest/report.eml if SMTP is not configured).'
     }
     failure {
       echo 'Pipeline failed — auto-defect payloads are in runs/latest/defects.json for Jira import.'
@@ -48,7 +48,7 @@ export function jenkinsfile(): string {
 }
 
 export function githubActions(): string {
-  return `name: Healwright E2E
+  return `name: Kasuwright E2E
 on: [push, workflow_dispatch]
 jobs:
   e2e:
@@ -59,7 +59,7 @@ jobs:
         with: { node-version: 20 }
       - run: npm ci
       - name: BRD -> framework pipeline
-        run: npx healwright pipeline --brd docs/BRD.md --out runs/latest --project QA
+        run: npx kasuwright pipeline --brd docs/BRD.md --out runs/latest --project QA
       - name: Run generated automation suite
         working-directory: runs/latest/framework
         run: |
@@ -71,6 +71,6 @@ jobs:
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
-        with: { name: healwright-report, path: runs/latest/report.html }
+        with: { name: kasuwright-report, path: runs/latest/report.html }
 `;
 }

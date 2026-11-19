@@ -33,15 +33,15 @@ export function toJiraIssues(reqs: Requirement[], projectKey: string): JiraIssue
         "Acceptance Criteria:",
         ...r.acceptanceCriteria.map((c) => `- ${c}`),
       ].join("\n"),
-      labels: ["healwright", "from-brd", r.id.toLowerCase()],
+      labels: ["kasuwright", "from-brd", r.id.toLowerCase()],
     });
     issues.push({
       key: `${ref}-QA`,
       summary: `QA: Test cases & automation for ${r.id} — ${r.title}`.slice(0, 240),
       issueType: "Sub-task",
       parentRef: ref,
-      description: `Design manual test cases, test data, and Playwright automation for ${r.id}. Generated and tracked by Healwright.`,
-      labels: ["healwright", "qa", r.id.toLowerCase()],
+      description: `Design manual test cases, test data, and Playwright automation for ${r.id}. Generated and tracked by Kasuwright.`,
+      labels: ["kasuwright", "qa", r.id.toLowerCase()],
     });
   }
   return issues;
@@ -67,14 +67,14 @@ export function toJiraPayloads(issues: JiraIssue[], projectKey: string) {
       description: adf(i.description),
       labels: i.labels,
     },
-    healwrightRef: i.key,
+    kasuwrightRef: i.key,
     parentRef: i.parentRef ?? null,
   }));
 }
 
 export function toJiraCsv(issues: JiraIssue[]): string {
   const esc = (s: string) => `"${s.replace(/"/g, '""').replace(/\n/g, " ")}"`;
-  const rows = [["Summary", "Issue Type", "Description", "Labels", "Healwright Ref", "Parent Ref"].join(",")];
+  const rows = [["Summary", "Issue Type", "Description", "Labels", "Kasuwright Ref", "Parent Ref"].join(",")];
   for (const i of issues) rows.push([esc(i.summary), i.issueType, esc(i.description), i.labels.join(" "), i.key, i.parentRef ?? ""].join(","));
   return rows.join("\n") + "\n";
 }
@@ -92,8 +92,8 @@ export async function pushToJira(issues: JiraIssue[], projectKey: string, cfg: J
   const auth = Buffer.from(`${cfg.email}:${cfg.apiToken}`).toString("base64");
   const created: string[] = [];
   for (const payload of toJiraPayloads(issues, projectKey)) {
-    const { healwrightRef, parentRef, ...body } = payload as any;
-    void healwrightRef; void parentRef; // sub-task parenting resolved by caller once real keys exist
+    const { kasuwrightRef, parentRef, ...body } = payload as any;
+    void kasuwrightRef; void parentRef; // sub-task parenting resolved by caller once real keys exist
     const res = await fetch(`${cfg.baseUrl}/rest/api/3/issue`, {
       method: "POST",
       headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json", Accept: "application/json" },

@@ -76,7 +76,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
     byRequirement: byReq,
   };
   put("test-data/test-data.json", JSON.stringify(namedSets, null, 2));
-  const sql = ["-- Healwright test-data + DB validation pack", ...dataSets.map((ds) => `-- ${ds.reqId}\n${dataSetToSql(ds)}`)].join("\n");
+  const sql = ["-- Kasuwright test-data + DB validation pack", ...dataSets.map((ds) => `-- ${ds.reqId}\n${dataSetToSql(ds)}`)].join("\n");
   stages.push({ name: "4. Test data", detail: `${dataSets.length} synthetic data sets (valid/invalid/empty/boundary) as JSON + CSV + SQL` });
 
   // 5–7 — Framework scaffold + automation compilation (UI/API/DB flows)
@@ -89,7 +89,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
   const traceRows = traceability(reqs, issues, cases);
   put("traceability.md", traceabilityMarkdown(traceRows));
   const html = renderHtmlReport({
-    title: `Healwright E2E Run — ${projectKey}`,
+    title: `Kasuwright E2E Run — ${projectKey}`,
     generatedAt: new Date().toISOString(),
     stages,
     traceRows,
@@ -99,9 +99,9 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
 
   // 9 — Email
   const eml = buildEml({
-    from: process.env.SMTP_FROM ?? "healwright@localhost",
+    from: process.env.SMTP_FROM ?? "kasuwright@localhost",
     to: process.env.REPORT_EMAIL_TO ?? "qa-team@company.com",
-    subject: `Healwright E2E Report — ${reqs.length} requirements, ${cases.length} test cases`,
+    subject: `Kasuwright E2E Report — ${reqs.length} requirements, ${cases.length} test cases`,
     text: stages.map((s) => `${s.name}: ${s.detail}`).join("\n"),
     html,
   });
@@ -116,7 +116,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
 
   // 10 — CI/CD
   put("Jenkinsfile", jenkinsfile());
-  put(".github/workflows/healwright.yml", githubActions());
+  put(".github/workflows/kasuwright.yml", githubActions());
   put("defects.json", JSON.stringify([], null, 2));
   stages.push({ name: "10. CI/CD", detail: "Jenkinsfile + GitHub Actions workflow generated; defects.json will collect auto-defects after test runs" });
 

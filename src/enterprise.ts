@@ -57,9 +57,9 @@ export function defectsFromFailures(failures: { title: string; error: string }[]
       issuetype: { name: "Bug" },
       description: {
         type: "doc", version: 1,
-        content: [{ type: "paragraph", content: [{ type: "text", text: `Raised automatically by Healwright CI. Failing test: ${f.title}. Error: ${f.error}` }] }],
+        content: [{ type: "paragraph", content: [{ type: "text", text: `Raised automatically by Kasuwright CI. Failing test: ${f.title}. Error: ${f.error}` }] }],
       },
-      labels: ["healwright", "auto-defect"],
+      labels: ["kasuwright", "auto-defect"],
     },
   }));
 }
@@ -79,7 +79,7 @@ export function renderHtmlReport(opts: {
 <style>body{font-family:system-ui,Arial,sans-serif;margin:2rem;color:#111}table{border-collapse:collapse;width:100%;margin:1rem 0}td,th{border:1px solid #ccc;padding:.4rem .6rem;text-align:left}th{background:#111;color:#fff}h1{font-size:1.4rem}</style></head>
 <body>
 <h1>${esc(opts.title)}</h1>
-<p>Generated ${esc(opts.generatedAt)} by Healwright E2E pipeline.</p>
+<p>Generated ${esc(opts.generatedAt)} by Kasuwright E2E pipeline.</p>
 <h2>Pipeline stages</h2>
 <table><tr><th>Stage</th><th>Result</th></tr>${stageRows}</table>
 <h2>Requirements Traceability Matrix</h2>
@@ -90,7 +90,7 @@ ${opts.extraHtml ?? ""}
 }
 
 export function buildEml(opts: { from: string; to: string; subject: string; text: string; html: string }): string {
-  const boundary = "healwright-boundary-42";
+  const boundary = "kasuwright-boundary-42";
   return [
     `From: ${opts.from}`,
     `To: ${opts.to}`,
@@ -131,7 +131,7 @@ export async function sendViaSmtp(cfg: SmtpConfig, to: string, eml: string): Pro
   });
   const send = async (cmd: string) => { socket.write(cmd + "\r\n"); return waitReply(); };
   await waitReply();
-  await send(`EHLO healwright`);
+  await send(`EHLO kasuwright`);
   if (cfg.user && cfg.pass) {
     await send("AUTH LOGIN");
     await send(Buffer.from(cfg.user).toString("base64"));

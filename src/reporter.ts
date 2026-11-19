@@ -13,16 +13,16 @@ export interface RunRecord {
 
 /**
  * Playwright reporter that appends one JSON line per test result to
- * .healwright/history.jsonl — the data source for `healwright analyze`.
+ * .kasuwright/history.jsonl — the data source for `kasuwright analyze`.
  *
  * Usage in playwright.config.ts:
- *   reporter: [["healwright/reporter"], ["list"]]
+ *   reporter: [["kasuwright/reporter"], ["list"]]
  */
-export default class HealwrightReporter implements Reporter {
+export default class KasuwrightReporter implements Reporter {
   private outDir: string;
 
   constructor(options: { outDir?: string } = {}) {
-    this.outDir = options.outDir ?? join(process.cwd(), ".healwright");
+    this.outDir = options.outDir ?? join(process.cwd(), ".kasuwright");
   }
 
   onTestEnd(test: TestCase, result: TestResult): void {

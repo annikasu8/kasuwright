@@ -21,7 +21,7 @@ const pageV2 = `<html><body>
   </form>
 </body></html>`;
 
-// Hints are what Healwright captured from the element while the test still passed (on v1).
+// Hints are what Kasuwright captured from the element while the test still passed (on v1).
 const hints: ElementHints = {
   tag: "button",
   text: "Sign in",
