@@ -23,8 +23,18 @@ async function fakeJira(seen: Seen): Promise<{ server: Server; url: string }> {
           { name: "Subtask", subtask: true },
         ] }] }));
       } else if (req.method === "POST" && u === "/rest/api/3/issue") {
+        try {
+          const fields = JSON.parse(body).fields;
+          seen.issueTypes.push(fields.issuetype.name);
+          // Real Jira: a sub-task type with no parent is a 400.
+          if (fields.issuetype.name === "Subtask" && !fields.parent?.key) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ errors: { issuetype: "Issue type is a sub-task but parent issue key or id not specified." } }));
+            return;
+          }
+          if (fields.issuetype.name === "Subtask") seen.issueTypes.push(`parent:${fields.parent.key}`);
+        } catch { /* ignore */ }
         seen.creates++;
-        try { seen.issueTypes.push(JSON.parse(body).fields.issuetype.name); } catch { /* ignore */ }
         res.writeHead(201, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ key: `QA-${seen.creates}` }));
       } else if (req.method === "POST" && /\/issue\/[^/]+\/comment$/.test(u)) {
@@ -62,6 +72,7 @@ test("pipeline closes the Jira loop: creates, comments and attaches artefacts", 
     // Issue types resolved against the project: "Task" (no Story) + "Subtask" spelling
     assert.ok(seen.issueTypes.includes("Task"), `expected Task in ${seen.issueTypes}`);
     assert.ok(seen.issueTypes.includes("Subtask"), `expected Subtask in ${seen.issueTypes}`);
+    assert.ok(seen.issueTypes.some((t) => t.startsWith("parent:QA-")), `expected sub-task parented to its Story in ${seen.issueTypes}`);
     assert.ok(seen.comments.length >= 1); // publish-back on each Story
     assert.match(seen.comments[0], /Kasuwright run complete/);
     const names = seen.attachments.join(" ");
