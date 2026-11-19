@@ -88,12 +88,51 @@ export function jiraConfigFromEnv(env: NodeJS.ProcessEnv = process.env): JiraCon
   return null;
 }
 
+export interface IssueTypeChoice { story: string; sub: string | null }
+
+/**
+ * Pick usable issue-type names from a project's real type list.
+ * Company-managed projects use "Story" / "Sub-task"; team-managed projects
+ * often have no "Story" (only "Task") and spell the child type "Subtask".
+ * Sending a name the project does not have fails with
+ * "Specify a valid issue type" — so always resolve against the project.
+ */
+export function pickIssueTypes(types: { name: string; subtask: boolean }[]): IssueTypeChoice {
+  if (types.length === 0) return { story: "Story", sub: "Sub-task" };
+  const normal = types.filter((t) => !t.subtask);
+  const story =
+    normal.find((t) => /^story$/i.test(t.name)) ??
+    normal.find((t) => /^task$/i.test(t.name)) ??
+    normal[0];
+  const sub = types.find((t) => t.subtask);
+  return { story: story ? story.name : "Story", sub: sub ? sub.name : null };
+}
+
+/** Ask the project which issue types it actually has (createmeta). */
+export async function resolveIssueTypes(cfg: JiraConfig, projectKey: string): Promise<IssueTypeChoice> {
+  try {
+    const res = await fetch(
+      `${cfg.baseUrl}/rest/api/3/issue/createmeta?projectKeys=${encodeURIComponent(projectKey)}&expand=projects.issuetypes`,
+      { headers: { Authorization: authHeader(cfg), Accept: "application/json" } },
+    );
+    if (!res.ok) return { story: "Story", sub: "Sub-task" };
+    const json = (await res.json()) as any;
+    const types = (json?.projects?.[0]?.issuetypes ?? []).map((t: any) => ({ name: String(t.name), subtask: Boolean(t.subtask) }));
+    return pickIssueTypes(types);
+  } catch {
+    return { story: "Story", sub: "Sub-task" };
+  }
+}
+
 export async function pushToJira(issues: JiraIssue[], projectKey: string, cfg: JiraConfig): Promise<string[]> {
   const auth = Buffer.from(`${cfg.email}:${cfg.apiToken}`).toString("base64");
+  const types = await resolveIssueTypes(cfg, projectKey);
   const created: string[] = [];
   for (const payload of toJiraPayloads(issues, projectKey)) {
     const { kasuwrightRef, parentRef, ...body } = payload as any;
     void kasuwrightRef; void parentRef; // sub-task parenting resolved by caller once real keys exist
+    // Map our logical types onto names this project actually accepts.
+    body.fields.issuetype = { name: payload.fields.issuetype.name === "Sub-task" ? (types.sub ?? types.story) : types.story };
     const res = await fetch(`${cfg.baseUrl}/rest/api/3/issue`, {
       method: "POST",
       headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json", Accept: "application/json" },
