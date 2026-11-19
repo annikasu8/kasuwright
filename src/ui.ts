@@ -16,7 +16,7 @@ import { runPipeline, type PipelineSummary, type StageResult } from "./pipeline.
 import { resolveIssueTypes, type JiraConfig } from "./jira.js";
 import { findBrdCandidates, openInBrowser } from "./wizard.js";
 
-export interface UiConfig { jira?: { baseUrl: string; email: string; apiToken: string }; projectKey?: string }
+export interface UiConfig { jira?: { baseUrl: string; email: string; apiToken: string }; projectKey?: string; reportEmail?: string }
 
 export function configPath(): string {
   return join(homedir(), ".kasuwright", "config.json");
@@ -91,7 +91,9 @@ a{color:var(--acc)}
 </div>
 <div class="row"><button class="ghost" id="testbtn" type="button">Test connection</button><span id="testout" class="mut"></span></div>
 <p class="mut" style="margin:8px 0 0">Details are saved only on this computer (~/.kasuwright/config.json). Your token is never sent anywhere except Atlassian.</p>
-</div></div>
+</div>
+<div style="margin-top:12px"><label>Report email — the run report is addressed to</label><input id="remail" placeholder="annikasu8@gmail.com"></div>
+</div>
 
 <button id="run">RUN — full pipeline</button>
 <div class="card hidden" id="progress"><h2>Run progress</h2><div id="stages"></div><div id="done" style="margin-top:12px"></div></div>
@@ -103,6 +105,7 @@ fetch("/api/state").then(function(r){return r.json()}).then(function(s){
   s.candidates.forEach(function(c){var o=document.createElement("option");o.value=c.path;o.textContent=c.name;$("cand").appendChild(o)});
   if(s.jira){$("usejira").checked=true;$("jiraform").classList.remove("hidden");$("jurl").value=s.jira.baseUrl||"";$("jemail").value=s.jira.email||"";$("jkey").value=s.projectKey||"";if(s.jira.hasToken)$("jtoken").placeholder="•••••• saved — leave blank to keep using it"}
   if(s.projectKey && !$("jkey").value)$("jkey").value=s.projectKey;
+  $("remail").value=s.reportEmail||"annikasu8@gmail.com";
 });
 $("cand").addEventListener("change",function(){ if(this.value){$("fname").textContent="Selected: "+this.options[this.selectedIndex].textContent; $("brd").value=""; brdFromFile="";} });
 $("drop").addEventListener("click",function(){$("file").click()});
@@ -123,7 +126,7 @@ $("testbtn").addEventListener("click",function(){
 });
 $("run").addEventListener("click",function(){
   var useJira=$("usejira").checked;
-  var body={brdText:$("brd").value,brdPath:$("cand").value,projectKey:($("jkey").value.trim()||"QA"),jira:useJira?jiraBody():null};
+  var body={brdText:$("brd").value,brdPath:$("cand").value,projectKey:($("jkey").value.trim()||"QA"),jira:useJira?jiraBody():null,reportEmail:$("remail").value.trim()};
   if(!body.brdText && !body.brdPath){alert("Add a BRD file first (drop / select / paste)");return}
   $("run").disabled=true;$("progress").classList.remove("hidden");$("stages").innerHTML="";$("done").innerHTML='<span class="mut">Running...</span>';
   fetch("/api/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
@@ -176,6 +179,7 @@ export function startUiServer(dir: string, port = 0): Promise<UiServer> {
           candidates: findBrdCandidates(dir).map((p) => ({ path: p, name: p.split("/").pop() })),
           jira: cfg.jira ? { baseUrl: cfg.jira.baseUrl, email: cfg.jira.email, hasToken: Boolean(cfg.jira.apiToken) } : null,
           projectKey: cfg.projectKey ?? "",
+          reportEmail: cfg.reportEmail ?? "annikasu8@gmail.com",
         });
       } else if (req.method === "POST" && url.pathname === "/api/test-jira") {
         const b = await readBody(req);
@@ -216,8 +220,13 @@ export function startUiServer(dir: string, port = 0): Promise<UiServer> {
             apiToken: String(b.jira.apiToken ?? "") || saved.jira?.apiToken || "",
           };
           if (!jira.baseUrl || !jira.email || !jira.apiToken) jira = null;
-          else saveConfig({ jira, projectKey: String(b.projectKey || "QA") });
         }
+        saveConfig({
+          ...saved,
+          projectKey: String(b.projectKey || saved.projectKey || "QA"),
+          reportEmail: String(b.reportEmail || saved.reportEmail || "annikasu8@gmail.com"),
+          ...(jira ? { jira } : {}),
+        });
         const state: RunState = { id, status: "running", stages: [], jiraBaseUrl: jira?.baseUrl };
         runs.set(id, state);
         const projectKey = String(b.projectKey || saved.projectKey || "QA");
@@ -228,6 +237,7 @@ export function startUiServer(dir: string, port = 0): Promise<UiServer> {
               outDir,
               projectKey,
               jira,
+              reportEmail: String(b.reportEmail || "") || undefined,
               onStage: (s) => state.stages.push(s),
             });
             state.status = "done";

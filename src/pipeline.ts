@@ -28,6 +28,8 @@ export interface PipelineOptions {
   llm?: LlmProvider | null;
   /** Explicit Jira config (e.g. from the web UI). Undefined = read env vars; null = export mode. */
   jira?: JiraConfig | null;
+  /** Recipient for the report email. Falls back to REPORT_EMAIL_TO, then the default below. */
+  reportEmail?: string;
   /** Called as each stage completes (live progress for the web UI). */
   onStage?: (s: StageResult) => void;
 }
@@ -144,7 +146,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
   // 9 — Email
   const eml = buildEml({
     from: process.env.SMTP_FROM ?? "kasuwright@localhost",
-    to: process.env.REPORT_EMAIL_TO ?? "qa-team@company.com",
+    to: opts.reportEmail ?? process.env.REPORT_EMAIL_TO ?? "annikasu8@gmail.com",
     subject: `Kasuwright E2E Report — ${reqs.length} requirements, ${cases.length} test cases`,
     text: stages.map((s) => `${s.name}: ${s.detail}`).join("\n"),
     html,
