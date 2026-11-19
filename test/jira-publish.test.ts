@@ -79,8 +79,8 @@ test("pipeline closes the Jira loop: creates, comments and attaches artefacts", 
     assert.match(names, /manual-scenarios-req-201\.md/);
     assert.match(names, /test-data-req-201\.csv/);
     assert.match(names, /report\.html/);
-    const stage11 = summary.stages.find((s) => s.name.startsWith("11."));
-    assert.ok(stage11, "stage 11 present");
+    const stage11 = summary.stages.find((s) => s.name.startsWith("12."));
+    assert.ok(stage11, "publish-back stage present");
     assert.match(stage11!.detail, /QA-1/);
   } finally {
     process.env = prev;
