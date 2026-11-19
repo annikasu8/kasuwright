@@ -23,7 +23,7 @@ async function main(): Promise<void> {
       await runWizard();
       return;
     }
-    console.log("Kasuwright: interactive wizard ki terminal kavali. CI/scripts kosam: kasuwright pipeline --brd <BRD.md>");
+    console.log("Kasuwright: the interactive wizard needs a terminal. For CI/scripts use: kasuwright pipeline --brd <BRD.md>");
   }
   if (cmd === "ui") {
     await startUi(process.cwd());
