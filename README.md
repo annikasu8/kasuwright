@@ -31,9 +31,12 @@ npx kasuwright
 Step 1: pick your BRD file (Kasuwright finds it in the folder automatically).
 Step 2: press Enter.
 
-Everything else is automatic: Jira tickets, test cases, test data, the
-Playwright framework, automation specs, traceability, the HTML report
-(opens in your browser), the email draft and the CI files. Power users and
+Everything else is automatic: Jira tickets (with acceptance criteria), test
+cases, test data, the Playwright framework, automation specs, traceability,
+the HTML report (opens in your browser), the email draft and the CI files.
+When Jira is connected, the loop closes itself: the run posts a comment on
+each ticket and attaches the manual scenarios sheet, the test data, the
+automation spec and the report to the ticket. Power users and
 CI can still drive every stage with flags — see `kasuwright pipeline --help`.
 
 ## The E2E pipeline (v0.2)
