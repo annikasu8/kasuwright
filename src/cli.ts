@@ -42,6 +42,7 @@ async function main(): Promise<void> {
       outDir: flag("out") ?? join(process.cwd(), "runs", "latest"),
       projectKey: flag("project") ?? "QA",
       llm,
+      execute: flag("url") ? { baseUrl: flag("url")! } : null,
     });
     console.log(`\nKasuwright E2E pipeline complete -> ${summary.outDir}`);
     for (const s of summary.stages) console.log(`  ${s.name}: ${s.detail}`);
