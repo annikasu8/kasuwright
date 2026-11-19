@@ -112,12 +112,12 @@ npx kasuwright
 ## 7. Business status and next steps
 
 - **Done:** blueprint, v0.1–v0.4 built and tested, GitHub repo public, npm live, landing page (2-step story), founder self-test on a clean Mac (2 Enters → report opened).
-- **Next (in order):** (1) validation — 5 QA-lead conversations in 7 days using the plan in `validation-plan.md`, with the copy-paste tester invite; success = 3+ confirm the pain and name ≥ $30/user/month or accept a pilot. (2) v0.4.1 — wizard prompts in English (currently Tanglish). (3) Demo video. (4) Launch posts (Product Hunt, LinkedIn, Playwright community) after validation. (5) Optional: landing page on GitHub Pages / kasuwright.com.
+- **Next (in order):** (1) validation — 5 QA-lead conversations in 7 days using the plan in `validation-plan.md`, with the copy-paste tester invite; success = 3+ confirm the pain and name ≥ $30/user/month or accept a pilot. (2) English UI + wizard text — done in v0.6.1. (3) Demo video. (4) Launch posts (Product Hunt, LinkedIn, Playwright community) after validation. (5) Optional: landing page on GitHub Pages / kasuwright.com.
 - **Guardrails:** paid cloud/LLM code stays private (only the open core is published); consult an immigration attorney before monetising (owner is on H1B).
 
 ## 8. Known limitations
 
-- Wizard text is currently Tanglish; English lands in v0.4.1.
+- Wizard and UI text were Tanglish up to v0.6.0; English from v0.6.1 (at the founder's direction).
 - Jira/email act only in export mode until the user sets the environment variables in section 4.
 - BRD parsing is tuned for Markdown/text documents with requirement IDs or user-story phrasing; scanned PDFs are not parsed yet.
 - Healing suggestions are advisory — a human approves each one (by design).
