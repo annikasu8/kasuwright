@@ -6,6 +6,7 @@ import { analyzeToFile } from "./analyze.js";
 import { runPipeline } from "./pipeline.js";
 import { llmFromEnv } from "./llm.js";
 import { analyzeFailureLLM } from "./llm-features.js";
+import { runWizard } from "./wizard.js";
 
 const [cmd, ...args] = process.argv.slice(2);
 const flag = (name: string) => {
@@ -14,6 +15,15 @@ const flag = (name: string) => {
 };
 
 async function main(): Promise<void> {
+  if (!cmd || cmd === "start") {
+    // The 2-step wizard is the default experience. In non-interactive
+    // shells (CI, pipes) fall through to usage instead of hanging.
+    if (process.stdin.isTTY) {
+      await runWizard();
+      return;
+    }
+    console.log("Kasuwright: interactive wizard ki terminal kavali. CI/scripts kosam: kasuwright pipeline --brd <BRD.md>");
+  }
   if (cmd === "pipeline") {
     const brd = flag("brd");
     if (!brd) {
@@ -102,6 +112,7 @@ async function main(): Promise<void> {
   console.log(`Kasuwright — E2E test lifecycle automation for Playwright teams
 
 Commands:
+  kasuwright                                       2-step wizard (BRD select -> Enter -> done)
   kasuwright pipeline --brd <BRD.md> [--out dir] [--project KEY]
       BRD -> Jira -> test cases -> test data -> framework -> automation
       -> traceability -> report -> email -> CI files
