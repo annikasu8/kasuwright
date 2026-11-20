@@ -208,3 +208,32 @@ export async function publishRunToJira(
   }
   return result;
 }
+
+/** Create ONE QA sub-task under an existing issue (ticket-first runs). */
+export async function createJiraSubtask(
+  cfg: JiraConfig,
+  projectKey: string,
+  parentKey: string,
+  summary: string,
+  descriptionText: string,
+): Promise<string> {
+  const types = await resolveIssueTypes(cfg, projectKey);
+  const body = {
+    fields: {
+      project: { key: projectKey },
+      summary,
+      description: adf(descriptionText),
+      issuetype: { name: types.sub ?? types.story },
+      parent: { key: parentKey },
+      labels: ["kasuwright"],
+    },
+  };
+  const res = await fetch(`${cfg.baseUrl}/rest/api/3/issue`, {
+    method: "POST",
+    headers: { Authorization: authHeader(cfg), "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Jira sub-task create under ${parentKey} failed (${res.status}): ${await res.text()}`);
+  const json = (await res.json()) as { key: string };
+  return json.key;
+}
