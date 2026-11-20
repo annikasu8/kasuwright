@@ -16,6 +16,10 @@ import { createInterface } from "node:readline/promises";
 import { spawn } from "node:child_process";
 import { runPipeline, type PipelineSummary } from "./pipeline.js";
 import { llmFromEnv } from "./llm.js";
+import { jiraConfigFromEnv, type JiraConfig } from "./jira.js";
+
+/** A Jira ticket key typed at Step 1 (e.g. KAN-4) starts a ticket-first run. */
+const TICKET_KEY = /^[A-Za-z][A-Za-z0-9_]+-\d+$/;
 
 const BRD_NAME = /(brd|requirement|srs|prd|spec)/i;
 const DOC_EXT = /\.(md|markdown|txt)$/i;
@@ -61,30 +65,44 @@ export async function runWizard(cwd: string = process.cwd()): Promise<PipelineSu
     console.log("Kasuwright — from BRD to the full test lifecycle, automatically.");
     console.log("You only do 2 steps.\n");
 
-    // Step 1 — the BRD
+    // Step 1 — the BRD, or a Jira ticket key to start from an existing ticket
     const candidates = findBrdCandidates(cwd);
     let brdPath: string | null = null;
+    let jiraTicket: { cfg: JiraConfig; key: string } | undefined;
+    let step1Answer = "";
     if (candidates.length > 0) {
       console.log("Step 1: Choose your BRD file:");
       candidates.slice(0, 9).forEach((c, i) => console.log(`  ${i + 1}. ${c}`));
-      console.log("  (for a different file, type its path)");
-      const answer = await rl.question("Number (default 1): ");
-      brdPath = pickCandidate(answer, candidates);
+      console.log("  (for a different file, type its path — or type a Jira ticket key like KAN-4)");
+      step1Answer = await rl.question("Number (default 1): ");
+      brdPath = pickCandidate(step1Answer, candidates);
     } else {
-      const answer = await rl.question("Step 1: Enter the BRD file path: ");
-      brdPath = pickCandidate(answer, []);
+      step1Answer = await rl.question("Step 1: Enter the BRD file path (or a Jira ticket key like KAN-4): ");
+      brdPath = pickCandidate(step1Answer, []);
     }
-    if (!brdPath) {
+    if (!brdPath && TICKET_KEY.test(step1Answer.trim())) {
+      const cfg = jiraConfigFromEnv();
+      if (!cfg) {
+        throw new Error("Ticket-first runs need Jira credentials: set JIRA_BASE_URL, JIRA_EMAIL and JIRA_API_TOKEN, or use the web UI (kasuwright ui) and type them once.");
+      }
+      jiraTicket = { cfg, key: step1Answer.trim().toUpperCase() };
+      console.log(`Starting from Jira ticket ${jiraTicket.key} — its acceptance criteria and attachments drive the run.`);
+    }
+    if (!brdPath && !jiraTicket) {
       throw new Error("BRD file not found. Enter the correct path, or run Kasuwright from the folder that contains the BRD.");
     }
 
-    // Step 2 — project key, Enter is enough
-    const keyAnswer = await rl.question("Step 2: Jira project key (default QA) — just press Enter: ");
-    const projectKey = keyAnswer.trim() || "QA";
+    // Step 2 — project key, Enter is enough (skipped for ticket runs: the
+    // project comes from the ticket key itself)
+    let projectKey = "QA";
+    if (!jiraTicket) {
+      const keyAnswer = await rl.question("Step 2: Jira project key (default QA) — just press Enter: ");
+      projectKey = keyAnswer.trim() || "QA";
+    }
 
     console.log("\nThat's it — everything else is automatic. Running...\n");
     const outDir = join(cwd, "runs", "latest");
-    const summary = await runPipeline({ brdPath, outDir, projectKey, llm: llmFromEnv() });
+    const summary = await runPipeline({ brdPath: brdPath ?? undefined, jiraTicket, outDir, projectKey, llm: llmFromEnv() });
 
     console.log(`\nDone -> ${summary.outDir}`);
     for (const s of summary.stages) console.log(`  ${s.name}: ${s.detail}`);
