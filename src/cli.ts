@@ -8,6 +8,8 @@ import { llmFromEnv } from "./llm.js";
 import { analyzeFailureLLM } from "./llm-features.js";
 import { runWizard } from "./wizard.js";
 import { startUi } from "./ui.js";
+import { jiraConfigFromEnv, type JiraConfig } from "./jira.js";
+import { SCHEDULES, isScheduleKey, type ScheduleKey } from "./cicd.js";
 
 const [cmd, ...args] = process.argv.slice(2);
 const flag = (name: string) => {
@@ -31,18 +33,40 @@ async function main(): Promise<void> {
   }
   if (cmd === "pipeline") {
     const brd = flag("brd");
-    if (!brd) {
-      console.error("Usage: kasuwright pipeline --brd <BRD.md> [--out runs/latest] [--project QA]");
+    const ticket = flag("jira-ticket");
+    if (!brd && !ticket) {
+      console.error("Usage: kasuwright pipeline --brd <BRD.md> [--out runs/latest] [--project QA]\n   or: kasuwright pipeline --jira-ticket KAN-4 [--out runs/latest] [--url <app-url>]  (needs JIRA_* env)");
       process.exit(2);
     }
     const llm = llmFromEnv();
     console.log(llm ? `LLM: enabled (${llm.model})` : "LLM: not configured — deterministic engines only (set KASUWRIGHT_LLM_API_KEY to enable)");
+    let jiraTicket: { cfg: JiraConfig; key: string } | undefined;
+    if (ticket) {
+      const cfg = jiraConfigFromEnv();
+      if (!cfg) {
+        console.error("--jira-ticket needs JIRA_BASE_URL, JIRA_EMAIL and JIRA_API_TOKEN set in the environment.");
+        process.exit(2);
+      }
+      jiraTicket = { cfg, key: ticket.toUpperCase() };
+    }
+    let jenkins: { schedule: ScheduleKey } | null = null;
+    const jenkinsFlag = flag("jenkins");
+    if (jenkinsFlag !== undefined) {
+      const key = (jenkinsFlag || "nightly").toLowerCase();
+      if (!isScheduleKey(key)) {
+        console.error(`--jenkins schedule must be one of: ${Object.keys(SCHEDULES).join(", ")}`);
+        process.exit(2);
+      }
+      jenkins = { schedule: key };
+    }
     const summary = await runPipeline({
-      brdPath: brd,
+      brdPath: brd ?? undefined,
+      jiraTicket,
       outDir: flag("out") ?? join(process.cwd(), "runs", "latest"),
       projectKey: flag("project") ?? "QA",
       llm,
       execute: flag("url") ? { baseUrl: flag("url")! } : null,
+      jenkins,
     });
     console.log(`\nKasuwright E2E pipeline complete -> ${summary.outDir}`);
     for (const s of summary.stages) console.log(`  ${s.name}: ${s.detail}`);

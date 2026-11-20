@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { runPipeline, type PipelineSummary, type StageResult } from "./pipeline.js";
 import { resolveIssueTypes, type JiraConfig } from "./jira.js";
 import { findBrdCandidates, openInBrowser } from "./wizard.js";
+import { isScheduleKey, type ScheduleKey } from "./cicd.js";
 
 export interface UiConfig { jira?: { baseUrl: string; email: string; apiToken: string }; projectKey?: string; reportEmail?: string }
 
@@ -78,6 +79,7 @@ a{color:var(--acc)}
 <div class="row" style="margin-top:10px"><span class="mut">Or pick a BRD from this folder:</span><select id="cand" style="width:auto;flex:1"><option value="">— select —</option></select></div>
 <div id="fname" class="mut"></div>
 <textarea id="brd" placeholder="Your BRD text appears here — you can edit it if needed"></textarea>
+<div style="margin-top:12px"><label>OR — start from a Jira ticket instead (its acceptance criteria, BRD and mock-data attachments drive the run; results are posted back to the same ticket)</label><input id="ticketkey" placeholder="Ticket key, e.g. KAN-4"></div>
 </div>
 
 <div class="card"><h2>Step 2 — Jira (optional)</h2>
@@ -95,6 +97,8 @@ a{color:var(--acc)}
 <div style="margin-top:12px"><label>Report email — the run report is addressed to</label><input id="remail" placeholder="annikasu8@gmail.com"></div>
 <div style="margin-top:10px"><label><input type="checkbox" id="exec" style="width:auto"> Run the tests in a browser &amp; capture a screenshot at every step (Excel proof for manual testers)</label>
 <div id="execform" class="hidden"><label>Application URL — the app to test</label><input id="appurl" placeholder="https://your-app.example.com/login"></div></div>
+<div style="margin-top:10px"><label><input type="checkbox" id="usejenkins" style="width:auto"> Also set up Jenkins CI/CD — a scheduled pipeline that re-runs everything automatically</label>
+<div id="jenkinsform" class="hidden"><label>Run schedule</label><select id="jsched"><option value="nightly">Nightly (around 2 AM)</option><option value="weekdays">Weekday mornings (around 8 AM, Mon–Fri)</option><option value="every6h">Every 6 hours</option><option value="weekly">Weekly (Monday, around 3 AM)</option></select><p class="mut" style="margin:4px 0 0">The run will include a ready Jenkins pack (Jenkinsfile with the schedule built in, an importable job file, and a setup guide) in the jenkins folder.</p></div></div>
 </div>
 
 <button id="run">RUN — full pipeline</button>
@@ -118,6 +122,7 @@ $("file").addEventListener("change",function(){if(this.files.length)readFile(thi
 function readFile(f){var r=new FileReader();r.onload=function(){$("brd").value=r.result;brdFromFile=f.name;$("fname").textContent="Loaded: "+f.name;$("cand").value=""};r.readAsText(f)}
 $("usejira").addEventListener("change",function(){$("jiraform").classList.toggle("hidden",!this.checked)});
 $("exec").addEventListener("change",function(){$("execform").classList.toggle("hidden",!this.checked)});
+$("usejenkins").addEventListener("change",function(){$("jenkinsform").classList.toggle("hidden",!this.checked)});
 function jiraBody(){return {baseUrl:$("jurl").value.trim(),email:$("jemail").value.trim(),apiToken:$("jtoken").value.trim(),projectKey:$("jkey").value.trim()}}
 $("testbtn").addEventListener("click",function(){
   $("testout").textContent="Testing...";
@@ -129,8 +134,9 @@ $("testbtn").addEventListener("click",function(){
 });
 $("run").addEventListener("click",function(){
   var useJira=$("usejira").checked;
-  var body={brdText:$("brd").value,brdPath:$("cand").value,projectKey:($("jkey").value.trim()||"QA"),jira:useJira?jiraBody():null,reportEmail:$("remail").value.trim(),execute:$("exec").checked?{baseUrl:$("appurl").value.trim()}:null};
-  if(!body.brdText && !body.brdPath){alert("Add a BRD file first (drop / select / paste)");return}
+  var body={brdText:$("brd").value,brdPath:$("cand").value,ticketKey:$("ticketkey").value.trim(),projectKey:($("jkey").value.trim()||"QA"),jira:useJira?jiraBody():null,reportEmail:$("remail").value.trim(),execute:$("exec").checked?{baseUrl:$("appurl").value.trim()}:null,jenkins:$("usejenkins").checked?{schedule:$("jsched").value}:null};
+  if(body.ticketKey && !useJira){alert("Ticket runs need Jira — tick 'Create tickets directly in Jira' in Step 2 and fill the connection details");return}
+  if(!body.ticketKey && !body.brdText && !body.brdPath){alert("Add a BRD file first (drop / select / paste) — or enter a Jira ticket key");return}
   $("run").disabled=true;$("progress").classList.remove("hidden");$("stages").innerHTML="";$("done").innerHTML='<span class="mut">Running...</span>';
   fetch("/api/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
   .then(function(r){return r.json()}).then(function(d){
@@ -141,7 +147,8 @@ $("run").addEventListener("click",function(){
         if(s.status==="done"){clearInterval(timer);$("run").disabled=false;
           var links=(s.summary.jiraCreated||[]).map(function(k){return s.jiraBaseUrl?'<a href="'+s.jiraBaseUrl+"/browse/"+k+'" target="_blank">'+k+"</a>":k}).join(", ");
           var ev=s.summary.evidence?'<div style="margin-top:8px">Execution evidence: '+s.summary.evidence.screenshots+" screenshots across "+s.summary.evidence.steps+' steps. <a href="/evidence/'+s.id+'"><button type="button">Download Excel evidence</button></a></div>':"";
-          $("done").innerHTML='<span class="ok">Done!</span> '+s.summary.requirements+" requirements, "+s.summary.testCases+" test cases. "+(links?"Jira: "+links+" ":"")+'<div style="margin-top:10px"><a href="/report/'+s.id+'" target="_blank"><button type="button">Open report</button></a></div>'+ev;
+          var src=s.summary.sourceTicket?(s.jiraBaseUrl?'Source ticket: <a href="'+s.jiraBaseUrl+"/browse/"+s.summary.sourceTicket+'" target="_blank">'+s.summary.sourceTicket+"</a>. ":"Source ticket: "+s.summary.sourceTicket+". "):"";
+          $("done").innerHTML='<span class="ok">Done!</span> '+s.summary.requirements+" requirements, "+s.summary.testCases+" test cases. "+src+(links?"Jira: "+links+" ":"")+'<div style="margin-top:10px"><a href="/report/'+s.id+'" target="_blank"><button type="button">Open report</button></a></div>'+ev;
         } else if(s.status==="error"){clearInterval(timer);$("run").disabled=false;$("done").innerHTML='<span class="err">Error: '+s.error+"</span>"}
       });
     },700);
@@ -206,14 +213,17 @@ export function startUiServer(dir: string, port = 0): Promise<UiServer> {
         const id = "ui-" + new Date().toISOString().replace(/[:.]/g, "-");
         const outDir = join(dir, "runs", id);
         mkdirSync(outDir, { recursive: true });
+        const ticketKey = String(b.ticketKey ?? "").trim().toUpperCase();
         let brdPath = String(b.brdPath ?? "");
-        if (!brdPath) {
-          const text = String(b.brdText ?? "");
-          if (!text.trim()) return json(400, { error: "No BRD text provided" });
-          brdPath = join(outDir, "brd.md");
-          writeFileSync(brdPath, text);
-        } else if (!existsSync(brdPath)) {
-          return json(400, { error: "BRD file not found: " + brdPath });
+        if (!ticketKey) {
+          if (!brdPath) {
+            const text = String(b.brdText ?? "");
+            if (!text.trim()) return json(400, { error: "No BRD text provided" });
+            brdPath = join(outDir, "brd.md");
+            writeFileSync(brdPath, text);
+          } else if (!existsSync(brdPath)) {
+            return json(400, { error: "BRD file not found: " + brdPath });
+          }
         }
         let jira: JiraConfig | null = null;
         const saved = loadConfig();
@@ -225,6 +235,7 @@ export function startUiServer(dir: string, port = 0): Promise<UiServer> {
           };
           if (!jira.baseUrl || !jira.email || !jira.apiToken) jira = null;
         }
+        if (ticketKey && !jira) return json(400, { error: "Ticket runs need the Jira connection details (Step 2)" });
         saveConfig({
           ...saved,
           projectKey: String(b.projectKey || saved.projectKey || "QA"),
@@ -237,12 +248,14 @@ export function startUiServer(dir: string, port = 0): Promise<UiServer> {
         void (async () => {
           try {
             state.summary = await runPipeline({
-              brdPath,
+              brdPath: ticketKey ? undefined : brdPath,
+              jiraTicket: ticketKey && jira ? { cfg: jira, key: ticketKey } : undefined,
               outDir,
               projectKey,
               jira,
               reportEmail: String(b.reportEmail || "") || undefined,
               execute: b.execute?.baseUrl ? { baseUrl: String(b.execute.baseUrl) } : null,
+              jenkins: b.jenkins?.schedule && isScheduleKey(String(b.jenkins.schedule)) ? { schedule: String(b.jenkins.schedule) as ScheduleKey } : null,
               onStage: (s) => state.stages.push(s),
             });
             state.status = "done";

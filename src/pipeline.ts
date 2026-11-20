@@ -11,20 +11,25 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseBrd } from "./brd.js";
-import { toJiraIssues, toJiraPayloads, toJiraCsv, jiraConfigFromEnv, pushToJira, publishRunToJira, type JiraPublishFile, type JiraConfig } from "./jira.js";
+import { parseBrd, type Requirement } from "./brd.js";
+import { toJiraIssues, toJiraPayloads, toJiraCsv, jiraConfigFromEnv, pushToJira, publishRunToJira, createJiraSubtask, type JiraPublishFile, type JiraConfig } from "./jira.js";
+import { intakeFromTicket } from "./jira-intake.js";
 import { generateTestCases, testCasesToMarkdown } from "./testcases.js";
 import { generateDataSet, dataSetToCsv, dataSetToSql } from "./testdata.js";
 import { scaffoldFramework } from "./codegen.js";
 import { traceability, traceabilityMarkdown, renderHtmlReport, buildEml, smtpConfigFromEnv, sendViaSmtp } from "./enterprise.js";
 import { jenkinsfile, githubActions } from "./ci.js";
+import { SCHEDULES, scheduledJenkinsfile, jenkinsJobConfigXml, jenkinsSetupReadme, type ScheduleKey } from "./cicd.js";
 import { executeCases } from "./execute.js";
 import { buildEvidenceWorkbook } from "./evidence.js";
 import type { LlmProvider } from "./llm.js";
 import { extractRequirementsLLM, designCasesLLM } from "./llm-features.js";
 
 export interface PipelineOptions {
-  brdPath: string;
+  /** BRD file to start from — or use jiraTicket instead. */
+  brdPath?: string;
+  /** Start from an existing Jira ticket: its acceptance criteria and attachments drive the run. */
+  jiraTicket?: { cfg: JiraConfig; key: string };
   outDir: string;
   projectKey?: string;
   llm?: LlmProvider | null;
@@ -34,14 +39,16 @@ export interface PipelineOptions {
   reportEmail?: string;
   /** When set, execute the generated cases in a real browser and build the Excel screenshot-evidence workbook. */
   execute?: { baseUrl: string } | null;
+  /** When set, also emit a scheduled Jenkins CI/CD pack under jenkins/ (Jenkinsfile with cron trigger, importable job config, setup guide). */
+  jenkins?: { schedule: ScheduleKey } | null;
   /** Called as each stage completes (live progress for the web UI). */
   onStage?: (s: StageResult) => void;
 }
 export interface StageResult { name: string; detail: string }
-export interface PipelineSummary { outDir: string; requirements: number; jiraIssues: number; testCases: number; stages: StageResult[]; jiraCreated?: string[]; evidence?: { casesRun: number; steps: number; screenshots: number; workbook: string } }
+export interface PipelineSummary { outDir: string; requirements: number; jiraIssues: number; testCases: number; stages: StageResult[]; jiraCreated?: string[]; sourceTicket?: string; evidence?: { casesRun: number; steps: number; screenshots: number; workbook: string } }
 
 export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummary> {
-  const projectKey = opts.projectKey ?? "QA";
+  const projectKey = opts.jiraTicket ? opts.jiraTicket.key.split("-")[0].toUpperCase() : (opts.projectKey ?? "QA");
   const out = opts.outDir;
   mkdirSync(out, { recursive: true });
   const stages: StageResult[] = [];
@@ -52,33 +59,61 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
     writeFileSync(p, content);
   };
 
-  // 1 — BRD intake (deterministic parser first; the LLM adds requirements
-  // from unstructured prose the parser cannot see, when a key is configured)
-  const brdText = readFileSync(opts.brdPath, "utf8");
-  let reqs = parseBrd(brdText);
-  let llmNote = "";
-  if (opts.llm) {
-    const extra = await extractRequirementsLLM(brdText, opts.llm);
-    if (extra) {
-      const known = new Set(reqs.map((r) => r.id));
-      const added = extra.filter((r) => !known.has(r.id));
-      if (reqs.length === 0) reqs = extra;
-      else reqs = [...reqs, ...added];
-      llmNote = `; LLM (${opts.llm.model}) contributed ${reqs.length === extra.length && added.length === 0 ? extra.length : added.length} requirement(s)`;
-    } else {
-      llmNote = "; LLM extraction returned nothing usable — deterministic parse kept";
+  // 1 — Intake. Two sources: a BRD file (deterministic parser first; the LLM
+  // adds requirements from unstructured prose when a key is configured), or
+  // an existing Jira ticket — its acceptance criteria and any attached BRD /
+  // mock-data files become the requirement source.
+  let reqs: Requirement[];
+  let sourceTicket: string | undefined;
+  if (opts.jiraTicket) {
+    sourceTicket = opts.jiraTicket.key.toUpperCase();
+    const intake = await intakeFromTicket(opts.jiraTicket.cfg, sourceTicket, out);
+    reqs = intake.requirements;
+    put("ticket.md", intake.ticketText);
+    put("requirements.json", JSON.stringify(reqs, null, 2));
+    push({
+      name: "1. Jira ticket intake",
+      detail: `Fetched ${sourceTicket} — ${reqs.length} requirement(s); ${reqs[0]?.acceptanceCriteria.length ?? 0} acceptance criteria on the ticket${intake.attachmentNames.length ? `; attachments: ${intake.attachmentNames.join(", ")}` : ""}${intake.providedData.length ? `; provided mock data: ${intake.providedData.join(", ")}` : ""}`,
+    });
+  } else {
+    const brdText = readFileSync(opts.brdPath!, "utf8");
+    reqs = parseBrd(brdText);
+    let llmNote = "";
+    if (opts.llm) {
+      const extra = await extractRequirementsLLM(brdText, opts.llm);
+      if (extra) {
+        const known = new Set(reqs.map((r) => r.id));
+        const added = extra.filter((r) => !known.has(r.id));
+        if (reqs.length === 0) reqs = extra;
+        else reqs = [...reqs, ...added];
+        llmNote = `; LLM (${opts.llm.model}) contributed ${reqs.length === extra.length && added.length === 0 ? extra.length : added.length} requirement(s)`;
+      } else {
+        llmNote = "; LLM extraction returned nothing usable — deterministic parse kept";
+      }
     }
+    put("requirements.json", JSON.stringify(reqs, null, 2));
+    push({ name: "1. BRD intake", detail: `${reqs.length} requirements parsed (${reqs.map((r) => r.id).join(", ")})${llmNote}` });
   }
-  put("requirements.json", JSON.stringify(reqs, null, 2));
-  push({ name: "1. BRD intake", detail: `${reqs.length} requirements parsed (${reqs.map((r) => r.id).join(", ")})${llmNote}` });
 
   // 2 — Jira
   const issues = toJiraIssues(reqs, projectKey);
   put("jira/jira-payloads.json", JSON.stringify(toJiraPayloads(issues, projectKey), null, 2));
   put("jira/jira-import.csv", toJiraCsv(issues));
-  const jiraCfg = opts.jira !== undefined ? opts.jira : jiraConfigFromEnv();
+  const jiraCfg = opts.jiraTicket ? opts.jiraTicket.cfg : (opts.jira !== undefined ? opts.jira : jiraConfigFromEnv());
   let createdKeys: string[] = [];
-  if (jiraCfg) {
+  if (sourceTicket && jiraCfg) {
+    // Ticket-first: the story already exists — hang one QA sub-task per
+    // requirement under the source ticket instead of creating new stories.
+    for (const r of reqs) {
+      const subKey = await createJiraSubtask(
+        jiraCfg, projectKey, sourceTicket,
+        `QA: Test cases & automation for ${r.id}`,
+        `${r.title}\n\nGenerated by Kasuwright from ticket ${sourceTicket} — scenarios, data and automation are attached to ${sourceTicket}.`,
+      );
+      createdKeys.push(subKey);
+    }
+    push({ name: "2. Jira", detail: `Working on existing ticket ${sourceTicket} — created ${createdKeys.length} QA sub-task(s) under it: ${createdKeys.join(", ")}` });
+  } else if (jiraCfg) {
     createdKeys = await pushToJira(issues, projectKey, jiraCfg);
     push({ name: "2. Jira", detail: `Created ${createdKeys.length} issues in ${projectKey}: ${createdKeys.join(", ")}` });
   } else {
@@ -168,7 +203,21 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
   put("Jenkinsfile", jenkinsfile());
   put(".github/workflows/kasuwright.yml", githubActions());
   put("defects.json", JSON.stringify([], null, 2));
-  push({ name: "10. CI/CD", detail: "Jenkinsfile + GitHub Actions workflow generated; defects.json will collect auto-defects after test runs" });
+  let cicdNote = "";
+  if (opts.jenkins) {
+    const packOpts = {
+      schedule: opts.jenkins.schedule,
+      projectKey,
+      reportEmail: opts.reportEmail ?? process.env.REPORT_EMAIL_TO ?? "annikasu8@gmail.com",
+      appUrl: opts.execute?.baseUrl,
+      ticketKey: sourceTicket,
+    };
+    put("jenkins/Jenkinsfile", scheduledJenkinsfile(packOpts));
+    put("jenkins/job-config.xml", jenkinsJobConfigXml(packOpts));
+    put("jenkins/README-jenkins.md", jenkinsSetupReadme(packOpts));
+    cicdNote = `; Jenkins scheduled pack ready in jenkins/ — ${SCHEDULES[opts.jenkins.schedule].label} (${SCHEDULES[opts.jenkins.schedule].cron}): import job-config.xml or paste the Jenkinsfile, it then runs on schedule`;
+  }
+  push({ name: "10. CI/CD", detail: `Jenkinsfile + GitHub Actions workflow generated; defects.json will collect auto-defects after test runs${cicdNote}` });
 
   // 11 — Execution evidence (optional): run the generated cases in a real
   // browser, screenshot every step, and compile the Excel proof workbook
@@ -198,7 +247,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
     const published: string[] = [];
     for (let i = 0; i < reqs.length; i++) {
       const r = reqs[i];
-      const storyKey = createdKeys[i * 2]; // issues alternate Story, QA sub-task
+      const storyKey = sourceTicket ?? createdKeys[i * 2]; // ticket-first publishes to the source ticket; otherwise issues alternate Story, QA sub-task
       if (!storyKey) continue;
       const reqCases = cases.filter((c) => c.reqId === r.id);
       const ds = dataSets.find((d) => d.reqId === r.id);
@@ -226,7 +275,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineSummar
     push({ name: "12. Jira publish-back", detail: `Comments + artefacts posted to ${published.length} stories: ${published.join("; ")}` });
   }
 
-  const summary: PipelineSummary = { outDir: out, requirements: reqs.length, jiraIssues: issues.length, testCases: cases.length, stages, jiraCreated: createdKeys, evidence: evidenceInfo };
+  const summary: PipelineSummary = { outDir: out, requirements: reqs.length, jiraIssues: issues.length, testCases: cases.length, stages, jiraCreated: createdKeys, sourceTicket, evidence: evidenceInfo };
   put("run-summary.json", JSON.stringify(summary, null, 2));
   return summary;
 }
