@@ -66,6 +66,14 @@ files, runs the same pipeline (browser evidence included), creates a QA
 sub-task under the ticket, and posts all results back onto the same
 ticket.
 
+**Scheduled Jenkins CI/CD (v0.9):** tick "Also set up Jenkins CI/CD" in
+the UI (or pass `--jenkins nightly|weekdays|every6h|weekly`) and the run
+also emits a ready Jenkins pack in `jenkins/`: a Jenkinsfile with the
+cron schedule built in, an importable job definition
+(`job-config.xml`), and a 5-minute setup guide. Import it once and
+Jenkins re-runs the whole chain — pipeline, automation, evidence,
+report, result emails — on schedule.
+
 ## The E2E pipeline (v0.2)
 
 One command runs the whole test lifecycle:

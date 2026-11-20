@@ -2,7 +2,7 @@
 
 **Product:** Kasuwright (Kasu + Playwright) — AI-ready test automation toolkit
 **Owner / Author:** Anil Kasarla (annikasu8@gmail.com)
-**Current version:** 0.8.0 (19 Nov 2026)
+**Current version:** 0.9.0 (19 Nov 2026)
 **License:** MIT (open core)
 **Links:** npm — https://www.npmjs.com/package/kasuwright · GitHub — https://github.com/annikasu8/kasuwright
 
@@ -41,6 +41,7 @@ Kasuwright does two jobs for QA / SDET teams:
 | FR-15 | Local web UI: `kasuwright ui` serves a browser page on 127.0.0.1 — BRD drag-and-drop or folder pick, Jira connect form (validated with a test-connection call, saved only in ~/.kasuwright/config.json, token never returned to the page), RUN with live stage progress, Jira links and the HTML report | `src/ui.ts` |
 | FR-16 | Execution evidence: with an app URL, execute the generated cases in a real browser (Playwright loaded dynamically), screenshot every step, and build evidence.xlsx (Summary + one sheet per case, descriptions + statuses + embedded screenshots); attached to the first Jira Story | `src/execute.ts`, `src/evidence.ts`, `src/pipeline.ts` |
 | FR-17 | Ticket-first intake: fetch a Jira issue (ADF description → plain text), extract its acceptance criteria, download attachments (BRD docs add requirements; CSV/JSON kept as provided mock data); create a QA sub-task under the ticket and publish all results back onto the same ticket | `src/jira-intake.ts`, `src/jira.ts`, `src/pipeline.ts` |
+| FR-18 | Scheduled Jenkins pack (opt-in): Jenkinsfile with cron trigger + result emails, importable job-config.xml (TimerTrigger + embedded CpsFlowDefinition script), README-jenkins.md setup guide; presets nightly / weekdays / every6h / weekly | `src/cicd.ts`, `src/pipeline.ts` |
 | FR-13 | Zero-knowledge wizard: bare `kasuwright` auto-detects BRD files in the folder, asks only (1) which file and (2) project key (Enter = default), runs the pipeline and opens report.html | `src/wizard.ts` |
 
 ### 2.2 Non-functional requirements
@@ -114,6 +115,7 @@ npx kasuwright
 | 0.6.2 | 19 Nov 2026 | Report email defaults to annikasu8@gmail.com; editable in the UI |
 | 0.7.0 | 19 Nov 2026 | Execution evidence — browser run with a screenshot at every step and an Excel evidence workbook (verified end-to-end against a live login page) |
 | 0.8.0 | 19 Nov 2026 | Ticket-first runs — start from an existing Jira ticket key: acceptance criteria + attached BRD/mock data drive the run; QA sub-task created under the ticket; results published back onto the same ticket |
+| 0.9.0 | 19 Nov 2026 | Optional scheduled Jenkins CI/CD pack (UI checkbox / `--jenkins <preset>`): Jenkinsfile with cron trigger, importable job-config.xml with embedded script, setup guide; 4 schedule presets |
 
 ## 7. Business status and next steps
 
