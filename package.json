@@ -1,6 +1,6 @@
 {
   "name": "kasuwright",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "AI-ready self-healing locators and failure analysis for Playwright test suites",
   "type": "module",
   "bin": {
