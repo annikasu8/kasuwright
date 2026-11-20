@@ -58,6 +58,14 @@ step descriptions, statuses and the screenshots embedded. The workbook is
 also attached to the Jira Story. One-time setup in the project:
 `npm i -D @playwright/test && npx playwright install chromium`.
 
+**Start from a Jira ticket (v0.8):** no BRD file? Give Kasuwright an
+existing ticket key instead — type it in the UI's Step 1, at the wizard
+prompt, or run `kasuwright pipeline --jira-ticket KAN-4`. It reads the
+ticket's acceptance criteria, downloads any attached BRD / mock-data
+files, runs the same pipeline (browser evidence included), creates a QA
+sub-task under the ticket, and posts all results back onto the same
+ticket.
+
 ## The E2E pipeline (v0.2)
 
 One command runs the whole test lifecycle:
